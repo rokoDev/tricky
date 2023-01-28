@@ -11,6 +11,14 @@
 #include "handlers.h"
 #include "payload.h"
 
+#define TRICKY_SOURCE_LOCATION \
+    ::tricky::e_source_location { __FILE__, __LINE__, __FUNCTION__ }
+
+#define TRICKY_NEW_ERROR(E)       \
+    {                             \
+        E, TRICKY_SOURCE_LOCATION \
+    }
+
 namespace tricky
 {
 #ifdef TRICKY_PAYLOAD_MAXSPACE
@@ -345,6 +353,13 @@ class result
     {
         shared_state::enforce_value_state();
         shared_state::type_index(type_index_v<E>);
+    }
+
+    template <typename E, typename PayloadValue,
+              typename = enable_if_valid_error_t<E>>
+    inline result(E aError, PayloadValue &&aValue) noexcept : result(aError)
+    {
+        load(std::forward<PayloadValue>(aValue));
     }
 
     template <typename E, typename... Es>

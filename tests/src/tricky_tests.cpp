@@ -87,7 +87,8 @@ class TrickyHandlersTest : public ::testing::Test
         k_none = 0,
         k_char,
         k_float_char,
-        k_float_char_uint32_t
+        k_float_char_uint32_t,
+        k_src_location
     };
     template <typename R>
     std::enable_if_t<tricky::is_result_v<utils::remove_cvref_t<R>>, int>
@@ -97,7 +98,9 @@ class TrickyHandlersTest : public ::testing::Test
             [this](char) { payload_flag_ = e_payload::k_char; },
             [this](float, char) { payload_flag_ = e_payload::k_float_char; },
             [this](float, char, uint32_t)
-            { payload_flag_ = e_payload::k_float_char_uint32_t; });
+            { payload_flag_ = e_payload::k_float_char_uint32_t; },
+            [this](const tricky::e_source_location&)
+            { payload_flag_ = e_payload::k_src_location; });
 
         const auto process_error = tricky::handlers(
             tricky::handler<eFileError>(
@@ -535,4 +538,11 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload8)
     result<int> r = 10;
     ASSERT_EQ(process_result(r), 0);
     ASSERT_EQ(payload_flag_, e_payload::k_none);
+}
+
+TEST_F(TrickyHandlersTest, HandleErrorWithPayload9)
+{
+    result<int> r = TRICKY_NEW_ERROR(eFileError::kBusyDescriptor);
+    ASSERT_EQ(process_result(r), -1);
+    ASSERT_EQ(payload_flag_, e_payload::k_src_location);
 }

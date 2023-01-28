@@ -119,6 +119,34 @@ template <std::size_t MaxSpace, std::size_t MaxCount>
 class payload
 {
    public:
+    template <typename T>
+    struct is_valid_argument_type
+        : std::bool_constant<not std::is_reference_v<std::remove_const_t<T>> &&
+                             not std::is_pointer_v<std::remove_const_t<T>> &&
+                             not std::is_volatile_v<std::remove_const_t<T>>>
+    {
+    };
+
+    template <typename T>
+    struct is_valid_argument_type<T &> : std::bool_constant<std::is_const_v<T>>
+    {
+    };
+
+    template <typename T>
+    struct is_valid_argument_type<T *> : std::bool_constant<std::is_const_v<T>>
+    {
+    };
+
+    template <typename T>
+    struct is_valid_argument_type<T *const>
+        : std::bool_constant<std::is_const_v<T>>
+    {
+    };
+
+    template <typename T>
+    static constexpr bool is_valid_argument_type_v =
+        is_valid_argument_type<T>::value;
+
     static constexpr std::size_t kMaxSpace{MaxSpace};
     static constexpr std::size_t kMaxCount{MaxCount};
 
@@ -318,6 +346,7 @@ class payload
     std::enable_if_t<utils::is_type_list_v<TList>, bool> match() const noexcept
     {
         bool retVal{};
+        validate_callback_arg_types<TList>();
         if constexpr (TList::size <= kMaxCount)
         {
             if (count_ >= TList::size)
@@ -411,6 +440,21 @@ class payload
         }
     }
 
+    template <typename TList>
+    static constexpr std::enable_if_t<utils::is_type_list_v<TList>>
+    validate_callback_arg_types() noexcept
+    {
+        constexpr auto kValidArgsCount =
+            TList::template count_of_predicate_compliant<
+                is_valid_argument_type>;
+        static_assert(
+            kValidArgsCount == TList::size,
+            "It is must be impossible to change values stored in payload via "
+            "callback' arguments. Therefore argument type should be const "
+            "reference, pointer to const or copied by value. For details see "
+            "is_valid_argument_type.");
+    }
+
     template <typename Callbacks, std::size_t... I>
     bool process_impl(Callbacks &&aCallbacks,
                       std::index_sequence<I...>) const noexcept
@@ -441,7 +485,9 @@ class payload
     void make_call(Callback &&aCallback,
                    std::index_sequence<I...>) const noexcept
     {
-        aCallback(extract<typename ArgTypes::template at<I>>(I)...);
+        aCallback(
+            extract<utils::remove_cvref_t<typename ArgTypes::template at<I>>>(
+                I)...);
     }
 
     void add_value_info(std::string_view aTypeName, char *aValuePtr,
@@ -469,9 +515,11 @@ class payload
     template <typename TList, std::size_t... I>
     bool match_impl(std::index_sequence<I...>) const noexcept
     {
-        return (... &&
-                (values_[I].value_type ==
-                 (type_name::type_name<typename TList::template at<I>>())));
+        return (
+            ... &&
+            (values_[I].value_type ==
+             (type_name::type_name<
+                 utils::remove_cvref_t<typename TList::template at<I>>>())));
     }
 
     struct value_info

@@ -537,3 +537,15 @@ TEST_F(LoadedPayloadTest, ProcessMixedTuple)
     auto handlers = std::make_tuple([]() {}, payload_test::g, f);
     ASSERT_TRUE(data.process(handlers));
 }
+
+TEST(PayloadTest, ValidateCallbackArgumentType)
+{
+    using payload = tricky::payload<128, 10>;
+    static_assert(payload::is_valid_argument_type_v<char>);
+    static_assert(payload::is_valid_argument_type_v<const char>);
+    static_assert(payload::is_valid_argument_type_v<const char &>);
+    static_assert(payload::is_valid_argument_type_v<char const *>);
+    static_assert(payload::is_valid_argument_type_v<char const *const>);
+    static_assert(not payload::is_valid_argument_type_v<char &>);
+    static_assert(not payload::is_valid_argument_type_v<char *>);
+}
