@@ -546,3 +546,15 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload9)
     ASSERT_EQ(process_result(r), -1);
     ASSERT_EQ(payload_flag_, e_payload::k_src_location);
 }
+
+TEST(TrickySimpleTest, HandleErrorForWhichHandlerDoesNotProvided)
+{
+    const auto process_error = tricky::handlers(
+        tricky::handler<eFileError::kEOF>([](auto) noexcept { return -2; }));
+    result<int> r = TRICKY_NEW_ERROR(eFileError::kPermission);
+    ASSERT_EQ(process_error(r), -1);
+
+    const auto swallow_error =
+        tricky::handlers(tricky::handler([](auto) noexcept { return -1; }));
+    swallow_error(r);
+}

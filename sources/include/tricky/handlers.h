@@ -256,7 +256,7 @@ class handlers_base : public Handlers...
         using matched_handlers =
             typename handlers_list::template list_of_predicate_compliant_t<
                 is_any_handler>;
-        int retVal{};
+        int retVal{-1};
         if constexpr (matched_handlers::size)
         {
             using any_error_handler = typename matched_handlers::template at<0>;

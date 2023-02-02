@@ -13,7 +13,7 @@ FetchContent_Declare(
 FetchContent_Declare(
 	interval
 	GIT_REPOSITORY https://github.com/rokoDev/interval.git
-	GIT_TAG        f1ef357b5b41ade09de06b4faacd5aa6287dd1d7
+	GIT_TAG        9621cf141f8503aecf89de6233c0dda4267cb53a
 )
 
 FetchContent_Declare(
