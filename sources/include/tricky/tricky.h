@@ -348,18 +348,13 @@ class result
 
     inline constexpr result(T aValue) noexcept : value_(aValue) {}
 
-    template <typename E, typename = enable_if_valid_error_t<E>>
-    inline result(E aError) noexcept : error_(aError)
+    template <typename E, typename... PayloadValue,
+              typename = enable_if_valid_error_t<E>>
+    inline result(E aError, PayloadValue &&...aValue) noexcept : error_(aError)
     {
         shared_state::enforce_value_state();
         shared_state::type_index(type_index_v<E>);
-    }
-
-    template <typename E, typename PayloadValue,
-              typename = enable_if_valid_error_t<E>>
-    inline result(E aError, PayloadValue &&aValue) noexcept : result(aError)
-    {
-        load(std::forward<PayloadValue>(aValue));
+        (..., shared_state::load(std::forward<PayloadValue>(aValue)));
     }
 
     template <typename E, typename... Es>
@@ -445,10 +440,14 @@ class result
             error_);
     }
 
-    template <typename V>
-    static void load(V &&aValue) noexcept
+    template <typename... V>
+    static void load(V &&...aValue) noexcept
     {
-        shared_state::load(std::forward<V>(aValue));
+        static_assert(sizeof...(V) > 0);
+        if (has_error())
+        {
+            (..., shared_state::load(std::forward<V>(aValue)));
+        }
     }
 
    private:
@@ -578,8 +577,9 @@ class result<void, Error, Errors...>
 
     inline constexpr result &operator=(result &&) noexcept = default;
 
-    template <typename E>
-    inline result(E aError) noexcept : base(aError)
+    template <typename E, typename... PayloadValue>
+    inline result(E aError, PayloadValue &&...aValue) noexcept
+        : base(aError, std::forward<PayloadValue>(aValue)...)
     {
     }
 

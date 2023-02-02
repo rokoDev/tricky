@@ -558,3 +558,87 @@ TEST(TrickySimpleTest, HandleErrorForWhichHandlerDoesNotProvided)
         tricky::handlers(tricky::handler([](auto) noexcept { return -1; }));
     swallow_error(r);
 }
+
+TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructor)
+{
+    bool isPayloadProcessed{};
+    const auto payload_handlers = std::make_tuple(
+        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        { isPayloadProcessed = true; });
+
+    const auto process_error = tricky::handlers(tricky::handler(
+        [&payload_handlers](auto) noexcept
+        {
+            tricky::process_payload(payload_handlers);
+            return -2;
+        }));
+
+    const char* fileName = "myfile.txt";
+    result<int> r{eFileError::kPermission, TRICKY_SOURCE_LOCATION,
+                  tricky::c_str(fileName)};
+    process_error(r);
+    ASSERT_TRUE(isPayloadProcessed);
+}
+
+TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoad)
+{
+    bool isPayloadProcessed{};
+    const auto payload_handlers = std::make_tuple(
+        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        { isPayloadProcessed = true; });
+
+    const auto process_error = tricky::handlers(tricky::handler(
+        [&payload_handlers](auto) noexcept
+        {
+            tricky::process_payload(payload_handlers);
+            return -2;
+        }));
+
+    const char* fileName = "myfile.txt";
+    result<int> r{eFileError::kPermission};
+    r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+    process_error(r);
+    ASSERT_TRUE(isPayloadProcessed);
+}
+
+TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructorOfVoidResult)
+{
+    bool isPayloadProcessed{};
+    const auto payload_handlers = std::make_tuple(
+        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        { isPayloadProcessed = true; });
+
+    const auto process_error = tricky::handlers(tricky::handler(
+        [&payload_handlers](auto) noexcept
+        {
+            tricky::process_payload(payload_handlers);
+            return -2;
+        }));
+
+    const char* fileName = "myfile.txt";
+    result<void> r{eFileError::kPermission, TRICKY_SOURCE_LOCATION,
+                   tricky::c_str(fileName)};
+    process_error(r);
+    ASSERT_TRUE(isPayloadProcessed);
+}
+
+TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoadOfVoidResult)
+{
+    bool isPayloadProcessed{};
+    const auto payload_handlers = std::make_tuple(
+        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        { isPayloadProcessed = true; });
+
+    const auto process_error = tricky::handlers(tricky::handler(
+        [&payload_handlers](auto) noexcept
+        {
+            tricky::process_payload(payload_handlers);
+            return -2;
+        }));
+
+    const char* fileName = "myfile.txt";
+    result<void> r{eFileError::kPermission};
+    r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+    process_error(r);
+    ASSERT_TRUE(isPayloadProcessed);
+}
