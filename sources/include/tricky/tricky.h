@@ -20,6 +20,19 @@
         E, TRICKY_SOURCE_LOCATION \
     }
 
+#define TRICKY_TOKEN_PASTE(x, y) x##y
+#define TRICKY_TOKEN_PASTE2(x, y) TRICKY_TOKEN_PASTE(x, y)
+#define TRICKY_TMP TRICKY_TOKEN_PASTE2(tricky_tmp_, __LINE__)
+
+#define TRICKY_ASSIGN(v, r)                                                   \
+    auto &&TRICKY_TMP = r;                                                    \
+    static_assert(tricky::is_result_v<std::decay_t<decltype(TRICKY_TMP)>>,    \
+                  "second argument must be tricky::result<>. See is_result"); \
+    if (!TRICKY_TMP) return TRICKY_TMP;                                       \
+    v = std::forward<decltype(TRICKY_TMP)>(TRICKY_TMP).value()
+
+#define TRICKY_AUTO(v, r) TRICKY_ASSIGN(auto v, r)
+
 namespace tricky
 {
 template <typename T, typename Error, typename... Errors>
@@ -245,11 +258,33 @@ class result
         (..., shared_state::load(std::forward<PayloadValue>(aValue)));
     }
 
-    template <typename E, typename... Es>
-    inline result(const result<T, E, Es...> &&aResult) noexcept
+    template <typename R,
+              typename = std::enable_if_t<is_result_v<std::decay_t<R>>>>
+    inline result(R &&aResult) noexcept
     {
-        using ResultT = decltype(aResult);
-        init(std::forward<ResultT>(aResult));
+        using CoreT = std::decay_t<R>;
+        static_assert(is_result_v<CoreT>);
+        using other_value_type = typename CoreT::value_type;
+        constexpr bool is_compatible = std::disjunction_v<
+            std::is_same<other_value_type, value_type>,
+            std::conjunction<std::is_same<value_type, details::void_>,
+                             std::is_same<other_value_type, void>>>;
+        if constexpr (is_compatible)
+        {
+            if (aResult.has_value())
+            {
+                value_ = aResult.value_;
+            }
+            else
+            {
+                init(std::forward<R>(aResult));
+            }
+        }
+        else
+        {
+            shared_state::enforce_error_state();
+            init(std::forward<R>(aResult));
+        }
     }
 
     explicit operator bool() const noexcept
@@ -294,8 +329,18 @@ class result
     template <typename U>
     inline bool is_active_type() const noexcept
     {
-        constexpr std::size_t kIndex = type_index_v<U>;
-        return kIndex == shared_state::type_index();
+        if constexpr (std::conjunction_v<
+                          std::is_same<U, void>,
+                          std::is_same<value_type, details::void_>>)
+        {
+            constexpr std::size_t kIndex = type_index_v<value_type>;
+            return kIndex == shared_state::type_index();
+        }
+        else
+        {
+            constexpr std::size_t kIndex = type_index_v<U>;
+            return kIndex == shared_state::type_index();
+        }
     }
 
     template <typename E>
@@ -339,29 +384,21 @@ class result
     }
 
    private:
-    template <typename E, typename... Es>
-    inline void init(const result<T, E, Es...> &&aResult) noexcept
+    template <typename R>
+    inline void init(R &&aResult) noexcept
     {
-        static_assert(
-            std::conjunction_v<typename error_types::template contains<E>,
-                               typename error_types::template contains<Es>...>,
-            "<E, Es...> must be subset of <Error, Errors...>");
-        if (shared_state::has_value())
-        {
-            value_ = aResult.value_;
-        }
-        else
-        {
-            aResult.error_.perform(
-                shared_state::type_index() - 1,
-                [this](auto aError)
-                {
-                    using ActiveType = decltype(aError);
-                    error_at<ActiveType, type_index_v<ActiveType> - 1>(error_) =
-                        aError;
-                    shared_state::type_index(type_index_v<ActiveType>);
-                });
-        }
+        using errors_of_R = typename std::decay_t<R>::error_types;
+        static_assert(error_types::template contains_v<errors_of_R>,
+                      "errors of type R must be subset of <Error, Errors...>");
+        aResult.error_.perform(
+            shared_state::type_index() - 1,
+            [this](auto aError)
+            {
+                using ActiveType = decltype(aError);
+                error_at<ActiveType, type_index_v<ActiveType> - 1>(error_) =
+                    aError;
+                shared_state::type_index(type_index_v<ActiveType>);
+            });
     }
 
     template <typename E, std::size_t I, typename AnyE>
@@ -471,11 +508,10 @@ class result<void, Error, Errors...>
     {
     }
 
-    template <typename E, typename... Es>
-    inline result(const result<void, E, Es...> &&aResult) noexcept
+    template <typename R,
+              typename = std::enable_if_t<is_result_v<std::decay_t<R>>>>
+    inline result(R &&aResult) noexcept : base(std::forward<R>(aResult))
     {
-        using R = decltype(aResult);
-        base::init(std::forward<R>(aResult));
     }
 
     inline void value() const noexcept { base::enforce_value_state(); }
