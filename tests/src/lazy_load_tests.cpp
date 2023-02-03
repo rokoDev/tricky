@@ -109,3 +109,9 @@ TEST_F(LazyLoadTest, TestWithErrorAndMovedLazyLoad)
     }
     ASSERT_EQ(shard_state::get_payload().count(), 0);
 }
+
+TEST_F(LazyLoadTest, TestWithLValue)
+{
+    int k = 5;
+    auto load = tricky::on_error(k);
+}

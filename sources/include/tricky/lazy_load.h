@@ -20,8 +20,9 @@ class lazy_load
         aOther.moved_ = true;
     }
 
-    explicit lazy_load(Ts &&...aArg) noexcept
-        : cargo_(std::forward<Ts>(aArg)...), moved_{false}
+    template <typename... Types>
+    explicit lazy_load(Types &&...aArg) noexcept
+        : cargo_(std::forward<Types>(aArg)...), moved_{false}
     {
     }
 
@@ -54,7 +55,7 @@ class lazy_load
 template <typename... Ts>
 [[nodiscard]] inline decltype(auto) on_error(Ts &&...aForPayload) noexcept
 {
-    return lazy_load(std::forward<Ts>(aForPayload)...);
+    return lazy_load<Ts...>(std::forward<Ts>(aForPayload)...);
 }
 }  // namespace tricky
 
