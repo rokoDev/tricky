@@ -177,7 +177,7 @@ TEST_F(TrickyTest, ConversionFromWriterResultWithValue)
 TEST_F(TrickyTest, Conversion1)
 {
     writer::result<void> bufResult(eWriterError::kError4);
-    result<int16_t> r(bufResult);
+    result<int16_t> r(std::move(bufResult));
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
@@ -197,7 +197,7 @@ TEST_F(TrickyTest, Conversion2)
 TEST_F(TrickyTest, Conversion3)
 {
     writer::result<int16_t> bufResult(eWriterError::kError4);
-    result<void> r(bufResult);
+    result<void> r(std::move(bufResult));
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
@@ -217,7 +217,7 @@ TEST_F(TrickyTest, Conversion4)
 TEST_F(TrickyTest, Conversion5)
 {
     writer::result<void> bufResult(eWriterError::kError4);
-    result<void> r(bufResult);
+    result<void> r(std::move(bufResult));
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
@@ -228,9 +228,31 @@ TEST_F(TrickyTest, Conversion6)
 {
     writer::result<void> bufResult{};
     ASSERT_TRUE(bufResult.is_active_type<void>());
-    result<void> r(bufResult);
+    result<void> r(std::move(bufResult));
     ASSERT_TRUE(r.has_value());
     ASSERT_TRUE(r.is_active_type<void>());
+}
+
+TEST_F(TrickyTest, Conversion7)
+{
+    result<void> bufResult{eFileError::kPermission};
+    ASSERT_TRUE(bufResult.is_active_type<eFileError>());
+    result<char> r(std::move(bufResult));
+    ASSERT_TRUE(r.has_error());
+    ASSERT_TRUE(r.is_active_type<eFileError>());
+    ASSERT_EQ(r.error<eFileError>(), eFileError::kPermission);
+    handle_any_error(r);
+}
+
+TEST_F(TrickyTest, Conversion8)
+{
+    subset::result<void> bufResult{eFileError::kPermission};
+    ASSERT_TRUE(bufResult.is_active_type<eFileError>());
+    result<char> r(std::move(bufResult));
+    ASSERT_TRUE(r.has_error());
+    ASSERT_TRUE(r.is_active_type<eFileError>());
+    ASSERT_EQ(r.error<eFileError>(), eFileError::kPermission);
+    handle_any_error(r);
 }
 
 TEST_F(TrickyTest, OneErrorValueHandlerWithoutArguments)

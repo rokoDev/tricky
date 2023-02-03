@@ -82,7 +82,7 @@ union any_error
     {
         if (aIndex)
         {
-            perform(aIndex - 1, std::forward<Action>(aAction));
+            rest_values.perform(aIndex - 1, std::forward<Action>(aAction));
         }
         else
         {
@@ -260,7 +260,7 @@ class result
 
     template <typename R,
               typename = std::enable_if_t<is_result_v<std::decay_t<R>>>>
-    inline result(R &&aResult) noexcept
+    inline result(const R &&aResult) noexcept
     {
         using CoreT = std::decay_t<R>;
         static_assert(is_result_v<CoreT>);
@@ -277,13 +277,13 @@ class result
             }
             else
             {
-                init(std::forward<R>(aResult));
+                init(std::move(aResult));
             }
         }
         else
         {
             shared_state::enforce_error_state();
-            init(std::forward<R>(aResult));
+            init(std::move(aResult));
         }
     }
 
@@ -385,7 +385,7 @@ class result
 
    private:
     template <typename R>
-    inline void init(R &&aResult) noexcept
+    inline void init(const R &&aResult) noexcept
     {
         using errors_of_R = typename std::decay_t<R>::error_types;
         static_assert(error_types::template contains_v<errors_of_R>,
@@ -502,7 +502,8 @@ class result<void, Error, Errors...>
 
     inline constexpr result &operator=(result &&) noexcept = default;
 
-    template <typename E, typename... PayloadValue>
+    template <typename E, typename... PayloadValue,
+              typename = std::enable_if_t<std::is_enum_v<E>>>
     inline result(E aError, PayloadValue &&...aValue) noexcept
         : base(aError, std::forward<PayloadValue>(aValue)...)
     {
@@ -510,7 +511,7 @@ class result<void, Error, Errors...>
 
     template <typename R,
               typename = std::enable_if_t<is_result_v<std::decay_t<R>>>>
-    inline result(R &&aResult) noexcept : base(std::forward<R>(aResult))
+    inline result(const R &&aResult) noexcept : base(std::move(aResult))
     {
     }
 

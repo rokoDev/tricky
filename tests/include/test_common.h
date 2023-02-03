@@ -67,4 +67,10 @@ template <typename T>
 using result = tricky::result<T, eNetworkError>;
 }
 
+namespace subset
+{
+template <typename T>
+using result = tricky::result<T, eFileError, eBufferError, eWriterError>;
+}
+
 #endif /* tricky_test_common_h */
