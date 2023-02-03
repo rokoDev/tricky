@@ -2,75 +2,7 @@
 #include <tricky/tricky.h>
 #include <user_literals/user_literals.h>
 
-enum class eReaderError : uint8_t
-{
-    kError1,
-    kError2,
-};
-
-enum class eWriterError : uint8_t
-{
-    kError3,
-    kError4,
-    kError5,
-};
-
-enum class eBufferError : uint8_t
-{
-    kInvalidIndex,
-    kInvalidPointer,
-};
-
-enum class eFileError : uint8_t
-{
-    kOpenError,
-    kEOF,
-    kAccessDenied,
-    kPermission,
-    kBusyDescriptor,
-    kFileNotFound,
-    kSystemError
-};
-
-enum class eNetworkError : uint8_t
-{
-    kUnreachableHost,
-    kLostConnection
-};
-
-template <typename T>
-using result =
-    tricky::result<T, eReaderError, eWriterError, eBufferError, eFileError>;
-
-namespace buffer
-{
-template <typename T>
-using result = tricky::result<T, eBufferError>;
-}
-
-namespace writer
-{
-template <typename T>
-using result = tricky::result<T, eWriterError>;
-}
-
-namespace reader
-{
-template <typename T>
-using result = tricky::result<T, eReaderError>;
-}
-
-namespace file
-{
-template <typename T>
-using result = tricky::result<T, eBufferError, eFileError>;
-};
-
-namespace network
-{
-template <typename T>
-using result = tricky::result<T, eNetworkError>;
-}
+#include "test_common.h"
 
 class TrickyTest : public ::testing::Test
 {

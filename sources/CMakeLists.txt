@@ -4,6 +4,8 @@ target_sources(tricky
     include/tricky/payload.h
     include/tricky/data.h
     include/tricky/handlers.h
+    include/tricky/lazy_load.h
+    include/tricky/state.h
   )
 
 set_property(TARGET tricky APPEND PROPERTY SRC_DIRS "${CMAKE_CURRENT_LIST_DIR}/include")

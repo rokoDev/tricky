@@ -81,6 +81,7 @@ function(package_add_test)
 endfunction()
 
 set(test_src
+  include/test_common.h
   src/tricky_tests.cpp
   )
 package_add_test(
@@ -94,6 +95,16 @@ set(test_src
   )
 package_add_test(
   TEST_TARGET_NAME payload_tests
+  TEST_SOURCES ${test_src}
+  EXTRA_TARGETS tricky tests_main gmock
+  )
+
+set(test_src
+  include/test_common.h
+  src/lazy_load_tests.cpp
+  )
+package_add_test(
+  TEST_TARGET_NAME lazy_load_tests
   TEST_SOURCES ${test_src}
   EXTRA_TARGETS tricky tests_main gmock
   )

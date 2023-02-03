@@ -6,6 +6,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "state.h"
+
 namespace tricky
 {
 template <typename H, auto... Errors>
@@ -202,7 +204,7 @@ class handlers_base : public Handlers...
 
     using error_values = utils::concatenate_t<error_values_list_t<Handlers>...>;
 
-    template <typename SharedState, auto Error>
+    template <auto Error>
     constexpr int process_error_value() const noexcept
     {
         using matched_handlers =
@@ -221,16 +223,16 @@ class handlers_base : public Handlers...
             {
                 retVal = value_handler::handler(Error);
             }
-            SharedState::reset();
+            tricky::shared_state::reset();
             return retVal;
         }
         else
         {
-            return process_error_category<SharedState>(Error);
+            return process_error_category(Error);
         }
     }
 
-    template <typename SharedState, typename Category>
+    template <typename Category>
     constexpr int process_error_category(Category aError) const noexcept
     {
         using matched_handlers =
@@ -240,16 +242,16 @@ class handlers_base : public Handlers...
         {
             using category_handler = typename matched_handlers::template at<0>;
             int retVal = category_handler::handler(aError);
-            SharedState::reset();
+            tricky::shared_state::reset();
             return retVal;
         }
         else
         {
-            return process_any_error<SharedState>(aError);
+            return process_any_error(aError);
         }
     }
 
-    template <typename SharedState, typename Category>
+    template <typename Category>
     constexpr int process_any_error(
         [[maybe_unused]] Category aError) const noexcept
     {
@@ -261,21 +263,20 @@ class handlers_base : public Handlers...
         {
             using any_error_handler = typename matched_handlers::template at<0>;
             retVal = any_error_handler::handler(aError);
-            SharedState::reset();
+            tricky::shared_state::reset();
         }
         return retVal;
     }
 
     using value_handler_func_t = int (handlers_base::*)() const noexcept;
 
-    template <typename E, typename IntervalT, typename SharedState,
-              std::size_t... I>
+    template <typename E, typename IntervalT, std::size_t... I>
     constexpr int call_value_handler(std::size_t aIndex,
                                      std::index_sequence<I...>) const noexcept
     {
         value_handler_func_t handlers[sizeof...(I)]{
-            &handlers_base::process_error_value<
-                SharedState, static_cast<E>(IntervalT::valueAt(I))>...};
+            &handlers_base::process_error_value<static_cast<E>(
+                IntervalT::valueAt(I))>...};
         return (this->*handlers[aIndex])();
     }
 
@@ -294,9 +295,6 @@ class handlers_base : public Handlers...
         static_assert(not error_values::contains_copies,
                       "duplications of error values is not allowed.");
 
-        using ResultT = utils::remove_cvref_t<R>;
-        using SharedState = typename ResultT::shared_state;
-
         const auto kError = aResult.template error<E>();
         if constexpr (error_values::template contains_type<E>)
         {
@@ -313,17 +311,17 @@ class handlers_base : public Handlers...
             {
                 const std::size_t kIndex =
                     interval_type::indexOf(kErrorAsIntegral);
-                return call_value_handler<E, interval_type, SharedState>(
+                return call_value_handler<E, interval_type>(
                     kIndex, std::make_index_sequence<kCount>{});
             }
             else
             {
-                return process_error_category<SharedState>(kError);
+                return process_error_category(kError);
             }
         }
         else
         {
-            return process_error_category<SharedState>(kError);
+            return process_error_category(kError);
         }
     }
 
@@ -332,14 +330,13 @@ class handlers_base : public Handlers...
                                std::index_sequence<I...>) const noexcept
     {
         using ResultT = utils::remove_cvref_t<R>;
-        using SharedState = typename ResultT::shared_state;
         int retVal{};
         if (aResult.has_error())
         {
             constexpr handler_func_t<R> callbacks[sizeof...(I)] = {
                 &handlers_base::process_error_in_result<
                     typename ResultT::error_types::template at<I>, R>...};
-            retVal = (this->*callbacks[SharedState::type_index() - 1])(
+            retVal = (this->*callbacks[tricky::shared_state::type_index() - 1])(
                 std::forward<R>(aResult));
         }
         return retVal;
