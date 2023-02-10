@@ -530,10 +530,41 @@ try_handle_all(TryBlock &&aTryBlock, Handlers &&aHandlers) noexcept
     static_assert(
         handlers_list::template count_of_predicate_compliant<is_any_handler> ==
             1,
-        "Handlers must contains exactly one tricky::any_handler<T>.");
+        "Handlers must contain exactly one tricky::any_handler<T>.");
     if (auto r = std::forward<TryBlock>(aTryBlock)())
     {
         return std::move(r).value();
+    }
+    else
+    {
+        return aHandlers(std::move(r));
+    }
+}
+
+template <typename TryBlock, typename Handlers>
+std::enable_if_t<
+    std::conjunction_v<std::is_nothrow_invocable<TryBlock>,
+                       is_handlers<utils::remove_cvref_t<Handlers>>>,
+    typename std::decay_t<decltype(std::declval<TryBlock>()())>>
+try_handle_some(TryBlock &&aTryBlock, Handlers &&aHandlers) noexcept
+{
+    using HandlersT = utils::remove_cvref_t<Handlers>;
+    using try_block_return_type =
+        std::decay_t<decltype(std::declval<TryBlock>()())>;
+    static_assert(is_result_v<try_block_return_type>,
+                  "aTryBlock must return result<...> type");
+    using handlers_return_type = typename HandlersT::return_type;
+    static_assert(std::is_same_v<try_block_return_type, handlers_return_type>,
+                  "aTryBlock and aHandlers must return the same type.");
+    using handlers_list = typename HandlersT::handlers_list;
+    static_assert(
+        handlers_list::template count_of_predicate_compliant<is_any_handler> ==
+            0,
+        "Handlers must not contain any handlers of type "
+        "tricky::any_handler<T>.");
+    if (auto r = std::forward<TryBlock>(aTryBlock)())
+    {
+        return std::move(r);
     }
     else
     {

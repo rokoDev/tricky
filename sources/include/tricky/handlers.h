@@ -501,9 +501,13 @@ class handlers_base : public Handlers...
         }
         else
         {
-            if constexpr (not std::is_same_v<return_type, void>)
+            if constexpr (is_result_v<return_type>)
             {
-                return {aResult.value()};
+                return std::move(aResult);
+            }
+            else if constexpr (not std::is_same_v<return_type, void>)
+            {
+                return aResult.value();
             }
         }
     }

@@ -796,3 +796,69 @@ TEST(TrickySimpleTest, TryHandleAll2)
     ASSERT_EQ(value, 2);
     ASSERT_TRUE(is_value_processed);
 }
+
+TEST(TrickySimpleTest, TryHandleSome1)
+{
+    bool is_value_processed{false};
+    eFileError file_error{eFileError::kOpenError};
+    const auto process_error = tricky::handlers(
+        tricky::handler<eFileError>(
+            [&file_error](auto aError) noexcept
+            {
+                file_error = aError;
+                return result<void>{};
+            }),
+        tricky::handler<eReaderError::kError2, eFileError::kPermission>(
+            [&is_value_processed](auto) noexcept
+            {
+                is_value_processed = true;
+                return result<void>{};
+            }));
+
+    auto res = tricky::try_handle_some(
+        []() noexcept
+        {
+            const char* fileName = "myfile.txt";
+            result<void> r{eFileError::kPermission};
+            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            return r;
+        },
+        std::move(process_error));
+
+    static_assert(std::is_same_v<typename decltype(res)::value_type, void>);
+    ASSERT_TRUE(res);
+    ASSERT_TRUE(is_value_processed);
+}
+
+TEST(TrickySimpleTest, TryHandleSome2)
+{
+    bool is_value_processed{false};
+    eFileError file_error{eFileError::kOpenError};
+    const auto process_error = tricky::handlers(
+        tricky::handler<eFileError>(
+            [&file_error](auto aError) noexcept
+            {
+                file_error = aError;
+                return result<int>{3};
+            }),
+        tricky::handler<eReaderError::kError2, eFileError::kPermission>(
+            [&is_value_processed](auto) noexcept
+            {
+                is_value_processed = true;
+                return result<int>{};
+            }));
+
+    auto res = tricky::try_handle_some(
+        []() noexcept
+        {
+            const char* fileName = "myfile.txt";
+            result<int> r{eFileError::kFileNotFound};
+            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            return r;
+        },
+        std::move(process_error));
+
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res.value(), 3);
+    ASSERT_EQ(file_error, eFileError::kFileNotFound);
+}
