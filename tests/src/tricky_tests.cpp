@@ -7,8 +7,23 @@
 class TrickyTest : public ::testing::Test
 {
    protected:
-    static constexpr auto handle_any_error =
-        tricky::handlers(tricky::handler([](auto) noexcept { return -1; }));
+    template <typename T>
+    static constexpr auto handle_any_error = tricky::handlers(tricky::handler(
+        [](auto) noexcept
+        {
+            if constexpr (not std::is_same_v<T, void>)
+            {
+                return T{};
+            }
+        }));
+
+    template <typename T>
+    static decltype(auto) process_any_error(T&& aResult) noexcept
+    {
+        using ResultT = utils::remove_cvref_t<decltype(aResult)>;
+        using value_type = typename ResultT::value_type;
+        return handle_any_error<value_type>(std::forward<T>(aResult));
+    }
 };
 
 class TrickyHandlersTest : public ::testing::Test
@@ -22,8 +37,16 @@ class TrickyHandlersTest : public ::testing::Test
         k_float_char_uint32_t,
         k_src_location
     };
+    enum class e_handler_id
+    {
+        k_none = 0,
+        k_category,
+        k_value,
+        k_any
+    };
     template <typename R>
-    std::enable_if_t<tricky::is_result_v<utils::remove_cvref_t<R>>, int>
+    std::enable_if_t<tricky::is_result_v<utils::remove_cvref_t<R>>,
+                     typename utils::remove_cvref_t<R>::value_type>
     process_result(R&& aResult) noexcept
     {
         const auto payload_handlers = std::make_tuple(
@@ -34,30 +57,54 @@ class TrickyHandlersTest : public ::testing::Test
             [this](const tricky::e_source_location&)
             { payload_flag_ = e_payload::k_src_location; });
 
+        using value_type = typename utils::remove_cvref_t<R>::value_type;
+
         const auto process_error = tricky::handlers(
             tricky::handler<eFileError>(
-                [&payload_handlers](auto) noexcept
+                [&payload_handlers, this](auto) noexcept
                 {
+                    handler_id_ = e_handler_id::k_category;
                     tricky::process_payload(payload_handlers);
-                    return -1;
+                    if constexpr (not std::is_same_v<value_type, void>)
+                    {
+                        return value_type{};
+                    }
                 }),
             tricky::handler<eReaderError::kError2, eFileError::kPermission>(
-                [&payload_handlers](auto) noexcept
+                [&payload_handlers, this](auto) noexcept
                 {
+                    handler_id_ = e_handler_id::k_value;
                     tricky::process_payload(payload_handlers);
-                    return -2;
+                    if constexpr (not std::is_same_v<value_type, void>)
+                    {
+                        return value_type{};
+                    }
                 }),
             tricky::handler(
-                [&payload_handlers](auto) noexcept
+                [&payload_handlers, this](auto) noexcept
                 {
+                    handler_id_ = e_handler_id::k_any;
                     tricky::process_payload(payload_handlers);
-                    return -3;
+                    if constexpr (not std::is_same_v<value_type, void>)
+                    {
+                        return value_type{};
+                    }
                 }));
 
-        return process_error(aResult);
+        payload_flag_ = e_payload::k_none;
+        handler_id_ = e_handler_id::k_none;
+        if constexpr (not std::is_same_v<value_type, void>)
+        {
+            return process_error(std::move(aResult));
+        }
+        else
+        {
+            process_error(std::move(aResult));
+        }
     }
 
     e_payload payload_flag_{};
+    e_handler_id handler_id_{};
 };
 
 TEST_F(TrickyTest, DefaultResultConstructor)
@@ -69,6 +116,7 @@ TEST_F(TrickyTest, DefaultResultConstructor)
     ASSERT_EQ(r.value(), 0_u8);
     static_assert(std::is_same_v<Result::value_type, uint8_t>,
                   "invalid value_type");
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, ConstructorWithValue)
@@ -88,7 +136,7 @@ TEST_F(TrickyTest, ConstructorWithError)
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, ConstructorVoidResultWithError)
@@ -101,7 +149,7 @@ TEST_F(TrickyTest, ConstructorVoidResultWithError)
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
     static_assert(std::is_same_v<result<void>::value_type, void>,
                   "invalid value_type");
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, CallErrorForConstRValue)
@@ -109,7 +157,7 @@ TEST_F(TrickyTest, CallErrorForConstRValue)
     const result<void> r{eBufferError::kInvalidPointer};
     ASSERT_EQ(std::move(r).error<eBufferError>(),
               eBufferError::kInvalidPointer);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, CallErrorForRValue)
@@ -117,21 +165,21 @@ TEST_F(TrickyTest, CallErrorForRValue)
     result<void> r{eBufferError::kInvalidPointer};
     ASSERT_EQ(std::move(r).error<eBufferError>(),
               eBufferError::kInvalidPointer);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, CallErrorForConstRef)
 {
     const result<void> r{eBufferError::kInvalidPointer};
     ASSERT_EQ(r.error<eBufferError>(), eBufferError::kInvalidPointer);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, CallErrorForRef)
 {
     result<void> r{eBufferError::kInvalidPointer};
     ASSERT_EQ(r.error<eBufferError>(), eBufferError::kInvalidPointer);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, ConversionFromBufferResult)
@@ -141,7 +189,7 @@ TEST_F(TrickyTest, ConversionFromBufferResult)
     ASSERT_TRUE(r.has_error());
     ASSERT_TRUE(r.is_active_type<eBufferError>());
     ASSERT_EQ(r.error<eBufferError>(), eBufferError::kInvalidPointer);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, ConversionFromWriterResult)
@@ -151,7 +199,7 @@ TEST_F(TrickyTest, ConversionFromWriterResult)
     ASSERT_TRUE(r.has_error());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, ConstConversion)
@@ -161,7 +209,7 @@ TEST_F(TrickyTest, ConstConversion)
     ASSERT_TRUE(r.has_error());
     ASSERT_TRUE(r.is_active_type<eBufferError>());
     ASSERT_EQ(r.error<eBufferError>(), eBufferError::kInvalidPointer);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, ConversionFromWriterResultWithValue)
@@ -181,7 +229,7 @@ TEST_F(TrickyTest, Conversion1)
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, Conversion2)
@@ -191,7 +239,7 @@ TEST_F(TrickyTest, Conversion2)
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, Conversion3)
@@ -201,7 +249,7 @@ TEST_F(TrickyTest, Conversion3)
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, Conversion4)
@@ -211,7 +259,7 @@ TEST_F(TrickyTest, Conversion4)
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, Conversion5)
@@ -221,7 +269,7 @@ TEST_F(TrickyTest, Conversion5)
     ASSERT_FALSE(r.has_value());
     ASSERT_TRUE(r.is_active_type<eWriterError>());
     ASSERT_EQ(r.error<eWriterError>(), eWriterError::kError4);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, Conversion6)
@@ -241,7 +289,7 @@ TEST_F(TrickyTest, Conversion7)
     ASSERT_TRUE(r.has_error());
     ASSERT_TRUE(r.is_active_type<eFileError>());
     ASSERT_EQ(r.error<eFileError>(), eFileError::kPermission);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, Conversion8)
@@ -252,7 +300,7 @@ TEST_F(TrickyTest, Conversion8)
     ASSERT_TRUE(r.has_error());
     ASSERT_TRUE(r.is_active_type<eFileError>());
     ASSERT_EQ(r.error<eFileError>(), eFileError::kPermission);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyTest, OneErrorValueHandlerWithoutArguments)
@@ -263,17 +311,21 @@ TEST_F(TrickyTest, OneErrorValueHandlerWithoutArguments)
             [&activeError]() noexcept
             {
                 activeError = eReaderError::kError2;
-                return -1;
+                return reader::result<int>{-1};
             }));
 
-    reader::result<int> r = eReaderError::kError2;
-    handle_result(r);
-    ASSERT_EQ(activeError, eReaderError::kError2);
+    {
+        reader::result<int> r = eReaderError::kError2;
+        handle_result(std::move(r));
+        ASSERT_EQ(activeError, eReaderError::kError2);
+    }
 
-    r = eReaderError::kError1;
-    handle_result(r);
-    ASSERT_EQ(activeError, eReaderError::kError2);
-    handle_any_error(r);
+    {
+        reader::result<int> r = eReaderError::kError1;
+        handle_result(std::move(r));
+        ASSERT_EQ(activeError, eReaderError::kError2);
+        process_any_error(std::move(r));
+    }
 }
 
 TEST_F(TrickyTest, OneErrorValueHandlerWithArguments)
@@ -281,20 +333,24 @@ TEST_F(TrickyTest, OneErrorValueHandlerWithArguments)
     eReaderError activeError{};
     const auto handle_result =
         tricky::handlers(tricky::handler<eReaderError::kError2>(
-            [&activeError]([[maybe_unused]] auto aError) noexcept
+            [&activeError](auto) noexcept
             {
                 activeError = eReaderError::kError2;
-                return -1;
+                return reader::result<int>{-1};
             }));
 
-    reader::result<int> r = eReaderError::kError2;
-    handle_result(r);
-    ASSERT_EQ(activeError, eReaderError::kError2);
+    {
+        reader::result<int> r = eReaderError::kError2;
+        handle_result(std::move(r));
+        ASSERT_EQ(activeError, eReaderError::kError2);
+    }
 
-    r = eReaderError::kError1;
-    handle_result(r);
-    ASSERT_EQ(activeError, eReaderError::kError2);
-    handle_any_error(r);
+    {
+        reader::result<int> r = eReaderError::kError1;
+        const auto r2 = handle_result(std::move(r));
+        ASSERT_EQ(activeError, eReaderError::kError2);
+        process_any_error(std::move(r2));
+    }
 }
 
 TEST_F(TrickyTest, HandleTwoErrorValues)
@@ -302,20 +358,24 @@ TEST_F(TrickyTest, HandleTwoErrorValues)
     bool is_processed{false};
     const auto process_error = tricky::handlers(
         tricky::handler<eReaderError::kError2, eFileError::kPermission>(
-            [&is_processed]([[maybe_unused]] auto aError) noexcept
+            [&is_processed](auto) noexcept
             {
                 is_processed = true;
-                return -1;
+                return result<int>{-1};
             }));
 
-    result<int> r = eReaderError::kError2;
-    process_error(r);
-    ASSERT_TRUE(is_processed);
+    {
+        result<int> r = eReaderError::kError2;
+        process_error(std::move(r));
+        ASSERT_TRUE(is_processed);
+    }
 
-    is_processed = false;
-    r = eFileError::kPermission;
-    process_error(r);
-    ASSERT_TRUE(is_processed);
+    {
+        is_processed = false;
+        result<int> r = eFileError::kPermission;
+        process_error(std::move(r));
+        ASSERT_TRUE(is_processed);
+    }
 }
 
 TEST_F(TrickyTest, HandleTwoErrorValuesAndOneCategory)
@@ -327,31 +387,37 @@ TEST_F(TrickyTest, HandleTwoErrorValuesAndOneCategory)
             [&file_error](auto aError) noexcept
             {
                 file_error = aError;
-                return -1;
+                return result<int>{-1};
             }),
         tricky::handler<eReaderError::kError2, eFileError::kPermission>(
-            [&is_value_processed]([[maybe_unused]] auto aError) noexcept
+            [&is_value_processed](auto) noexcept
             {
                 is_value_processed = true;
-                return -1;
+                return result<int>{-1};
             }));
 
-    result<int> r = eReaderError::kError2;
-    process_error(r);
-    ASSERT_TRUE(is_value_processed);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
+    {
+        result<int> r = eReaderError::kError2;
+        process_error(std::move(r));
+        ASSERT_TRUE(is_value_processed);
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+    }
 
-    is_value_processed = false;
-    r = eFileError::kPermission;
-    process_error(r);
-    ASSERT_TRUE(is_value_processed);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
+    {
+        is_value_processed = false;
+        result<int> r = eFileError::kPermission;
+        process_error(std::move(r));
+        ASSERT_TRUE(is_value_processed);
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+    }
 
-    is_value_processed = false;
-    r = eFileError::kAccessDenied;
-    process_error(r);
-    ASSERT_EQ(file_error, eFileError::kAccessDenied);
-    ASSERT_FALSE(is_value_processed);
+    {
+        is_value_processed = false;
+        result<int> r = eFileError::kAccessDenied;
+        process_error(std::move(r));
+        ASSERT_EQ(file_error, eFileError::kAccessDenied);
+        ASSERT_FALSE(is_value_processed);
+    }
 }
 
 TEST_F(TrickyTest, IntHandlersForTwoErrorValuesForOneCategoryAndForRest)
@@ -364,50 +430,57 @@ TEST_F(TrickyTest, IntHandlersForTwoErrorValuesForOneCategoryAndForRest)
             [&file_error](auto aError) noexcept
             {
                 file_error = aError;
-                return -1;
+                return 1;
             }),
         tricky::handler<eReaderError::kError2, eFileError::kPermission>(
-            [&is_value_processed]([[maybe_unused]] auto aError) noexcept
+            [&is_value_processed](auto) noexcept
             {
                 is_value_processed = true;
-                return -1;
+                return 2;
             }),
         tricky::handler(
-            [&is_handler_for_any_error_called](
-                [[maybe_unused]] auto aError) noexcept
+            [&is_handler_for_any_error_called](auto) noexcept
             {
                 is_handler_for_any_error_called = true;
-                return -1;
+                return 3;
             }));
 
-    result<int> r = eReaderError::kError2;
-    static_assert(sizeof(result<int>) == sizeof(int),
-                  "sizeof(result<T>) must be equal to sizeof(T)");
-    process_error(r);
-    ASSERT_TRUE(is_value_processed);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
-    ASSERT_FALSE(is_handler_for_any_error_called);
+    {
+        result<int> r = eReaderError::kError2;
+        static_assert(sizeof(result<int>) == sizeof(int),
+                      "sizeof(result<T>) must be equal to sizeof(T)");
+        process_error(std::move(r));
+        ASSERT_TRUE(is_value_processed);
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+        ASSERT_FALSE(is_handler_for_any_error_called);
+    }
 
-    is_value_processed = false;
-    r = eFileError::kPermission;
-    process_error(r);
-    ASSERT_TRUE(is_value_processed);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
-    ASSERT_FALSE(is_handler_for_any_error_called);
+    {
+        is_value_processed = false;
+        result<int> r = eFileError::kPermission;
+        process_error(std::move(r));
+        ASSERT_TRUE(is_value_processed);
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+        ASSERT_FALSE(is_handler_for_any_error_called);
+    }
 
-    is_value_processed = false;
-    r = eFileError::kAccessDenied;
-    process_error(r);
-    ASSERT_EQ(file_error, eFileError::kAccessDenied);
-    ASSERT_FALSE(is_value_processed);
-    ASSERT_FALSE(is_handler_for_any_error_called);
+    {
+        is_value_processed = false;
+        result<int> r = eFileError::kAccessDenied;
+        process_error(std::move(r));
+        ASSERT_EQ(file_error, eFileError::kAccessDenied);
+        ASSERT_FALSE(is_value_processed);
+        ASSERT_FALSE(is_handler_for_any_error_called);
+    }
 
-    file_error = eFileError::kOpenError;
-    r = eBufferError::kInvalidPointer;
-    process_error(r);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
-    ASSERT_FALSE(is_value_processed);
-    ASSERT_TRUE(is_handler_for_any_error_called);
+    {
+        file_error = eFileError::kOpenError;
+        result<int> r = eBufferError::kInvalidPointer;
+        process_error(std::move(r));
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+        ASSERT_FALSE(is_value_processed);
+        ASSERT_TRUE(is_handler_for_any_error_called);
+    }
 }
 
 TEST_F(TrickyTest, VoidHandlersForTwoErrorValuesForOneCategoryAndForRest)
@@ -416,52 +489,48 @@ TEST_F(TrickyTest, VoidHandlersForTwoErrorValuesForOneCategoryAndForRest)
     bool is_handler_for_any_error_called{false};
     eFileError file_error{eFileError::kOpenError};
     const auto process_error = tricky::handlers(
-        tricky::handler<eFileError>(
-            [&file_error](auto aError) noexcept
-            {
-                file_error = aError;
-                return -1;
-            }),
+        tricky::handler<eFileError>([&file_error](auto aError) noexcept
+                                    { file_error = aError; }),
         tricky::handler<eReaderError::kError2, eFileError::kPermission>(
-            [&is_value_processed]([[maybe_unused]] auto aError) noexcept
-            {
-                is_value_processed = true;
-                return -1;
-            }),
-        tricky::handler(
-            [&is_handler_for_any_error_called](
-                [[maybe_unused]] auto aError) noexcept
-            {
-                is_handler_for_any_error_called = true;
-                return -1;
-            }));
+            [&is_value_processed](auto) noexcept
+            { is_value_processed = true; }),
+        tricky::handler([&is_handler_for_any_error_called](auto) noexcept
+                        { is_handler_for_any_error_called = true; }));
 
-    result<void> r = eReaderError::kError2;
-    process_error(r);
-    ASSERT_TRUE(is_value_processed);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
-    ASSERT_FALSE(is_handler_for_any_error_called);
+    {
+        result<void> r = eReaderError::kError2;
+        process_error(std::move(r));
+        ASSERT_TRUE(is_value_processed);
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+        ASSERT_FALSE(is_handler_for_any_error_called);
+    }
 
-    is_value_processed = false;
-    r = eFileError::kPermission;
-    process_error(r);
-    ASSERT_TRUE(is_value_processed);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
-    ASSERT_FALSE(is_handler_for_any_error_called);
+    {
+        is_value_processed = false;
+        result<void> r = eFileError::kPermission;
+        process_error(std::move(r));
+        ASSERT_TRUE(is_value_processed);
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+        ASSERT_FALSE(is_handler_for_any_error_called);
+    }
 
-    is_value_processed = false;
-    r = eFileError::kAccessDenied;
-    process_error(r);
-    ASSERT_EQ(file_error, eFileError::kAccessDenied);
-    ASSERT_FALSE(is_value_processed);
-    ASSERT_FALSE(is_handler_for_any_error_called);
+    {
+        is_value_processed = false;
+        result<void> r = eFileError::kAccessDenied;
+        process_error(std::move(r));
+        ASSERT_EQ(file_error, eFileError::kAccessDenied);
+        ASSERT_FALSE(is_value_processed);
+        ASSERT_FALSE(is_handler_for_any_error_called);
+    }
 
-    file_error = eFileError::kOpenError;
-    r = eBufferError::kInvalidPointer;
-    process_error(r);
-    ASSERT_EQ(file_error, eFileError::kOpenError);
-    ASSERT_FALSE(is_value_processed);
-    ASSERT_TRUE(is_handler_for_any_error_called);
+    {
+        file_error = eFileError::kOpenError;
+        result<void> r = eBufferError::kInvalidPointer;
+        process_error(std::move(r));
+        ASSERT_EQ(file_error, eFileError::kOpenError);
+        ASSERT_FALSE(is_value_processed);
+        ASSERT_TRUE(is_handler_for_any_error_called);
+    }
 }
 
 TEST_F(TrickyTest, ReturnErrorFromSubcall)
@@ -482,13 +551,14 @@ TEST_F(TrickyTest, ReturnErrorFromSubcall)
     ASSERT_TRUE(r.has_error());
     ASSERT_TRUE(r.is_active_type<eFileError>());
     ASSERT_EQ(r.error<eFileError>(), eFileError::kSystemError);
-    handle_any_error(r);
+    process_any_error(std::move(r));
 }
 
 TEST_F(TrickyHandlersTest, HandleErrorWithPayload1)
 {
     result<void> r = eReaderError::kError2;
-    ASSERT_EQ(process_result(r), -2);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_value);
     ASSERT_EQ(payload_flag_, e_payload::k_none);
 }
 
@@ -496,7 +566,8 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload2)
 {
     result<void> r = eFileError::kPermission;
     r.load('j');
-    ASSERT_EQ(process_result(r), -2);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_value);
     ASSERT_EQ(payload_flag_, e_payload::k_char);
 }
 
@@ -505,7 +576,8 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload3)
     result<int> r = eFileError::kPermission;
     r.load(1.23f);
     r.load('j');
-    ASSERT_EQ(process_result(r), -2);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_value);
     ASSERT_EQ(payload_flag_, e_payload::k_float_char);
 }
 
@@ -514,7 +586,8 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload4)
     result<int> r = eFileError::kSystemError;
     r.load(1.23f);
     r.load('j');
-    ASSERT_EQ(process_result(r), -1);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_category);
     ASSERT_EQ(payload_flag_, e_payload::k_float_char);
 }
 
@@ -524,7 +597,8 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload5)
     r.load(1.23f);
     r.load('j');
     r.load(3456_u32);
-    ASSERT_EQ(process_result(r), -3);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_any);
     ASSERT_EQ(payload_flag_, e_payload::k_float_char);
 }
 
@@ -533,7 +607,8 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload6)
     network::result<int> r = eNetworkError::kUnreachableHost;
     r.load('j');
     r.load(3456_u32);
-    ASSERT_EQ(process_result(r), -3);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_any);
     ASSERT_EQ(payload_flag_, e_payload::k_char);
 }
 
@@ -542,34 +617,39 @@ TEST_F(TrickyHandlersTest, HandleErrorWithPayload7)
     result<int> r = eFileError::kBusyDescriptor;
     r.load('j');
     r.load(3456_u32);
-    ASSERT_EQ(process_result(r), -1);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_category);
     ASSERT_EQ(payload_flag_, e_payload::k_char);
 }
 
 TEST_F(TrickyHandlersTest, HandleErrorWithPayload8)
 {
     result<int> r = 10;
-    ASSERT_EQ(process_result(r), 0);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_none);
     ASSERT_EQ(payload_flag_, e_payload::k_none);
 }
 
 TEST_F(TrickyHandlersTest, HandleErrorWithPayload9)
 {
     result<int> r = TRICKY_NEW_ERROR(eFileError::kBusyDescriptor);
-    ASSERT_EQ(process_result(r), -1);
+    process_result(std::move(r));
+    ASSERT_EQ(handler_id_, e_handler_id::k_category);
     ASSERT_EQ(payload_flag_, e_payload::k_src_location);
 }
 
 TEST(TrickySimpleTest, HandleErrorForWhichHandlerDoesNotProvided)
 {
-    const auto process_error = tricky::handlers(
-        tricky::handler<eFileError::kEOF>([](auto) noexcept { return -2; }));
+    const auto process_error =
+        tricky::handlers(tricky::handler<eFileError::kEOF>(
+            [](auto) noexcept { return result<int>{-2}; }));
     result<int> r = TRICKY_NEW_ERROR(eFileError::kPermission);
-    ASSERT_EQ(process_error(r), -1);
+    auto ret = process_error(std::move(r));
+    ASSERT_TRUE(ret.has_error());
 
     const auto swallow_error =
         tricky::handlers(tricky::handler([](auto) noexcept { return -1; }));
-    swallow_error(r);
+    ASSERT_EQ(swallow_error(std::move(ret)), -1);
 }
 
 TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructor)
@@ -589,7 +669,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructor)
     const char* fileName = "myfile.txt";
     result<int> r{eFileError::kPermission, TRICKY_SOURCE_LOCATION,
                   tricky::c_str(fileName)};
-    process_error(r);
+    process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
 }
 
@@ -610,7 +690,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoad)
     const char* fileName = "myfile.txt";
     result<int> r{eFileError::kPermission};
     r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
-    process_error(r);
+    process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
 }
 
@@ -621,17 +701,14 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructorOfVoidResult)
         [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
         { isPayloadProcessed = true; });
 
-    const auto process_error = tricky::handlers(tricky::handler(
-        [&payload_handlers](auto) noexcept
-        {
-            tricky::process_payload(payload_handlers);
-            return -2;
-        }));
+    const auto process_error = tricky::handlers(
+        tricky::handler([&payload_handlers](auto) noexcept
+                        { tricky::process_payload(payload_handlers); }));
 
     const char* fileName = "myfile.txt";
     result<void> r{eFileError::kPermission, TRICKY_SOURCE_LOCATION,
                    tricky::c_str(fileName)};
-    process_error(r);
+    process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
 }
 
@@ -642,16 +719,80 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoadOfVoidResult)
         [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
         { isPayloadProcessed = true; });
 
-    const auto process_error = tricky::handlers(tricky::handler(
-        [&payload_handlers](auto) noexcept
-        {
-            tricky::process_payload(payload_handlers);
-            return -2;
-        }));
+    const auto process_error = tricky::handlers(
+        tricky::handler([&payload_handlers](auto) noexcept
+                        { tricky::process_payload(payload_handlers); }));
 
     const char* fileName = "myfile.txt";
     result<void> r{eFileError::kPermission};
     r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
-    process_error(r);
+    process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
+}
+
+TEST(TrickySimpleTest, TryHandleAll1)
+{
+    bool is_value_processed{false};
+    bool is_handler_for_any_error_called{false};
+    eFileError file_error{eFileError::kOpenError};
+    const auto process_error = tricky::handlers(
+        tricky::handler<eFileError>([&file_error](auto aError) noexcept
+                                    { file_error = aError; }),
+        tricky::handler<eReaderError::kError2, eFileError::kPermission>(
+            [&is_value_processed](auto) noexcept
+            { is_value_processed = true; }),
+        tricky::handler([&is_handler_for_any_error_called](auto) noexcept
+                        { is_handler_for_any_error_called = true; }));
+
+    tricky::try_handle_all(
+        []() noexcept
+        {
+            const char* fileName = "myfile.txt";
+            result<void> r{eFileError::kPermission};
+            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            return r;
+        },
+        std::move(process_error));
+
+    ASSERT_TRUE(is_value_processed);
+}
+
+TEST(TrickySimpleTest, TryHandleAll2)
+{
+    bool is_value_processed{false};
+    bool is_handler_for_any_error_called{false};
+    eFileError file_error{eFileError::kOpenError};
+    const auto process_error = tricky::handlers(
+        tricky::handler<eFileError>(
+            [&file_error](auto aError) noexcept
+            {
+                file_error = aError;
+                return 1;
+            }),
+        tricky::handler<eReaderError::kError2, eFileError::kPermission>(
+            [&is_value_processed](auto) noexcept
+            {
+                is_value_processed = true;
+                return 2;
+            }),
+        tricky::handler(
+            [&is_handler_for_any_error_called](auto) noexcept
+            {
+                is_handler_for_any_error_called = true;
+                return 3;
+            }));
+
+    const auto value = tricky::try_handle_all(
+        []() noexcept
+        {
+            const char* fileName = "myfile.txt";
+            result<int> r{eFileError::kPermission};
+            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            return r;
+        },
+        std::move(process_error));
+
+    static_assert(std::is_same_v<std::remove_const_t<decltype(value)>, int>);
+    ASSERT_EQ(value, 2);
+    ASSERT_TRUE(is_value_processed);
 }

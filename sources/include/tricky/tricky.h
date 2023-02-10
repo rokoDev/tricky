@@ -35,9 +35,6 @@
 
 namespace tricky
 {
-template <typename T, typename Error, typename... Errors>
-class result;
-
 namespace details
 {
 template <class T>
@@ -156,19 +153,6 @@ union any_error<E>
     inline constexpr any_error(E aValue) noexcept : value(aValue) {}
 };
 }  // namespace details
-
-template <typename T>
-struct is_result : std::false_type
-{
-};
-
-template <typename T, typename Error, typename... Errors>
-struct is_result<result<T, Error, Errors...>> : std::true_type
-{
-};
-
-template <typename T>
-inline constexpr bool is_result_v = is_result<T>::value;
 
 template <typename T, typename Error, typename... Errors>
 class result
@@ -515,7 +499,10 @@ class result<void, Error, Errors...>
     {
     }
 
-    inline void value() const noexcept { base::enforce_value_state(); }
+    inline void value() const noexcept
+    {
+        base::shared_state::enforce_value_state();
+    }
 };
 
 template <typename... Callbacks>
@@ -523,6 +510,35 @@ constexpr bool process_payload(Callbacks &&...aCallbacks) noexcept
 {
     return shared_state::get_payload().process(
         std::forward<Callbacks>(aCallbacks)...);
+}
+
+template <typename TryBlock, typename Handlers>
+std::enable_if_t<
+    std::conjunction_v<std::is_nothrow_invocable<TryBlock>,
+                       is_handlers<utils::remove_cvref_t<Handlers>>>,
+    typename std::decay_t<decltype(std::declval<TryBlock>()().value())>>
+try_handle_all(TryBlock &&aTryBlock, Handlers &&aHandlers) noexcept
+{
+    using HandlersT = utils::remove_cvref_t<Handlers>;
+    static_assert(is_result_v<decltype(std::declval<TryBlock>()())>,
+                  "aTryBlock must return result<...> type");
+    using value_type =
+        std::decay_t<decltype(std::declval<TryBlock>()().value())>;
+    using handlers_return_type = typename HandlersT::return_type;
+    static_assert(std::is_same_v<value_type, handlers_return_type>);
+    using handlers_list = typename HandlersT::handlers_list;
+    static_assert(
+        handlers_list::template count_of_predicate_compliant<is_any_handler> ==
+            1,
+        "Handlers must contains exactly one tricky::any_handler<T>.");
+    if (auto r = std::forward<TryBlock>(aTryBlock)())
+    {
+        return std::move(r).value();
+    }
+    else
+    {
+        return aHandlers(std::move(r));
+    }
 }
 }  // namespace tricky
 

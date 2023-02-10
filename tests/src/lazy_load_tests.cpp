@@ -10,17 +10,23 @@ class LazyLoadTest : public ::testing::Test
     using e_source_location = tricky::e_source_location;
     using shard_state = tricky::shared_state;
     template <typename R, typename PH>
-    std::enable_if_t<tricky::is_result_v<utils::remove_cvref_t<R>>, int>
+    std::enable_if_t<tricky::is_result_v<utils::remove_cvref_t<R>>,
+                     typename utils::remove_cvref_t<R>::value_type>
     process_result(R&& aResult, PH&& aPayloadHandlers) noexcept
     {
-        const auto process_error = tricky::handlers(tricky::handler(
-            [&aPayloadHandlers](auto) noexcept
-            {
-                tricky::process_payload(aPayloadHandlers);
-                return -3;
-            }));
+        using return_type = typename utils::remove_cvref_t<R>::value_type;
+        const auto process_error = tricky::handlers(
+            tricky::handler([&aPayloadHandlers](auto) noexcept
+                            { tricky::process_payload(aPayloadHandlers); }));
 
-        return process_error(aResult);
+        if constexpr (std::is_same_v<return_type, void>)
+        {
+            process_error(std::move(aResult));
+        }
+        else
+        {
+            return process_error(std::move(aResult));
+        }
     }
 };
 

@@ -11,6 +11,8 @@
 
 namespace tricky
 {
+namespace details
+{
 template <typename T>
 struct is_functor
 {
@@ -21,6 +23,12 @@ struct is_functor
     static std::false_type test(...);
 
     static constexpr bool value = decltype(test<T>(0))::value;
+};
+}  // namespace details
+
+template <typename T>
+struct is_functor : std::bool_constant<details::is_functor<T>::value>
+{
 };
 
 template <typename T>
