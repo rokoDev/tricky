@@ -152,6 +152,13 @@ union any_error<E>
 
     inline constexpr any_error(E aValue) noexcept : value(aValue) {}
 };
+
+enum class eDiscriminant
+{
+    kSuccess,
+    kError,
+    kInvalid
+};
 }  // namespace details
 
 template <typename T, typename Error, typename... Errors>
@@ -163,6 +170,8 @@ class result
 
     template <typename... Handlers>
     friend class details::handlers_base;
+
+    using eDiscriminant = details::eDiscriminant;
 
     using shared_state = shared_state;
 
@@ -453,6 +462,7 @@ class result
         stored_type<T> value_;
         details::any_error<Error, Errors...> error_;
     };
+    eDiscriminant what_{eDiscriminant::kSuccess};
 };
 
 template <typename Error, typename... Errors>

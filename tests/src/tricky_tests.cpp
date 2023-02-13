@@ -447,8 +447,6 @@ TEST_F(TrickyTest, IntHandlersForTwoErrorValuesForOneCategoryAndForRest)
 
     {
         result<int> r = eReaderError::kError2;
-        static_assert(sizeof(result<int>) == sizeof(int),
-                      "sizeof(result<T>) must be equal to sizeof(T)");
         process_error(std::move(r));
         ASSERT_TRUE(is_value_processed);
         ASSERT_EQ(file_error, eFileError::kOpenError);
