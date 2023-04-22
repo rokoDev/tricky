@@ -544,6 +544,19 @@ class payload
     value_info values_[kMaxCount]{};
     char data_[kMaxSpace]{};
 };
+
+template <typename T>
+struct is_payload : std::false_type
+{
+};
+
+template <std::size_t MaxSpace, std::size_t MaxCount>
+struct is_payload<payload<MaxSpace, MaxCount>> : std::true_type
+{
+};
+
+template <typename T>
+inline constexpr bool is_payload_v = is_payload<T>::value;
 }  // namespace tricky
 
 #endif /* tricky_payload_h */
