@@ -4,6 +4,10 @@
 
 #include "test_common.h"
 
+namespace
+{
+using seq_t = cargo::seq<char, std::size_t>;
+using cseq_t = cargo::seq<const char, std::size_t>;
 class TrickyTest : public ::testing::Test
 {
    protected:
@@ -50,11 +54,12 @@ class TrickyHandlersTest : public ::testing::Test
     process_result(R&& aResult) noexcept
     {
         const auto payload_handlers = std::make_tuple(
-            [this](char) { payload_flag_ = e_payload::k_char; },
-            [this](float, char) { payload_flag_ = e_payload::k_float_char; },
-            [this](float, char, uint32_t)
+            [this](char) noexcept { payload_flag_ = e_payload::k_char; },
+            [this](float, char) noexcept
+            { payload_flag_ = e_payload::k_float_char; },
+            [this](float, char, uint32_t) noexcept
             { payload_flag_ = e_payload::k_float_char_uint32_t; },
-            [this](const tricky::e_source_location&)
+            [this](const tricky::e_source_location&) noexcept
             { payload_flag_ = e_payload::k_src_location; });
 
         using value_type = typename utils::remove_cvref_t<R>::value_type;
@@ -106,6 +111,7 @@ class TrickyHandlersTest : public ::testing::Test
     e_payload payload_flag_{};
     e_handler_id handler_id_{};
 };
+}  // namespace
 
 TEST_F(TrickyTest, DefaultResultConstructor)
 {
@@ -654,7 +660,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructor)
 {
     bool isPayloadProcessed{};
     const auto payload_handlers = std::make_tuple(
-        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        [&isPayloadProcessed](const tricky::e_source_location&, cseq_t) noexcept
         { isPayloadProcessed = true; });
 
     const auto process_error = tricky::handlers(tricky::handler(
@@ -666,7 +672,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructor)
 
     const char* fileName = "myfile.txt";
     result<int> r{eFileError::kPermission, TRICKY_SOURCE_LOCATION,
-                  tricky::c_str(fileName)};
+                  cseq_t(fileName, std::strlen(fileName))};
     process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
 }
@@ -675,7 +681,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoad)
 {
     bool isPayloadProcessed{};
     const auto payload_handlers = std::make_tuple(
-        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        [&isPayloadProcessed](const tricky::e_source_location&, cseq_t) noexcept
         { isPayloadProcessed = true; });
 
     const auto process_error = tricky::handlers(tricky::handler(
@@ -687,7 +693,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoad)
 
     const char* fileName = "myfile.txt";
     result<int> r{eFileError::kPermission};
-    r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+    r.load(TRICKY_SOURCE_LOCATION, cseq_t(fileName, std::strlen(fileName)));
     process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
 }
@@ -696,7 +702,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructorOfVoidResult)
 {
     bool isPayloadProcessed{};
     const auto payload_handlers = std::make_tuple(
-        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        [&isPayloadProcessed](const tricky::e_source_location&, cseq_t) noexcept
         { isPayloadProcessed = true; });
 
     const auto process_error = tricky::handlers(
@@ -705,7 +711,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaConstructorOfVoidResult)
 
     const char* fileName = "myfile.txt";
     result<void> r{eFileError::kPermission, TRICKY_SOURCE_LOCATION,
-                   tricky::c_str(fileName)};
+                   cseq_t(fileName, std::strlen(fileName))};
     process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
 }
@@ -714,7 +720,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoadOfVoidResult)
 {
     bool isPayloadProcessed{};
     const auto payload_handlers = std::make_tuple(
-        [&isPayloadProcessed](const tricky::e_source_location&, tricky::c_str)
+        [&isPayloadProcessed](const tricky::e_source_location&, cseq_t) noexcept
         { isPayloadProcessed = true; });
 
     const auto process_error = tricky::handlers(
@@ -723,7 +729,7 @@ TEST(TrickySimpleTest, LoadToPayloadMultipleValuesViaLoadOfVoidResult)
 
     const char* fileName = "myfile.txt";
     result<void> r{eFileError::kPermission};
-    r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+    r.load(TRICKY_SOURCE_LOCATION, cseq_t(fileName, std::strlen(fileName)));
     process_error(std::move(r));
     ASSERT_TRUE(isPayloadProcessed);
 }
@@ -747,7 +753,8 @@ TEST(TrickySimpleTest, TryHandleAll1)
         {
             const char* fileName = "myfile.txt";
             result<void> r{eFileError::kPermission};
-            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            r.load(TRICKY_SOURCE_LOCATION,
+                   cseq_t(fileName, std::strlen(fileName)));
             return r;
         },
         std::move(process_error));
@@ -785,7 +792,8 @@ TEST(TrickySimpleTest, TryHandleAll2)
         {
             const char* fileName = "myfile.txt";
             result<int> r{eFileError::kPermission};
-            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            r.load(TRICKY_SOURCE_LOCATION,
+                   cseq_t(fileName, std::strlen(fileName)));
             return r;
         },
         std::move(process_error));
@@ -818,7 +826,8 @@ TEST(TrickySimpleTest, TryHandleSome1)
         {
             const char* fileName = "myfile.txt";
             result<void> r{eFileError::kPermission};
-            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            r.load(TRICKY_SOURCE_LOCATION,
+                   cseq_t(fileName, std::strlen(fileName)));
             return r;
         },
         std::move(process_error));
@@ -851,7 +860,8 @@ TEST(TrickySimpleTest, TryHandleSome2)
         {
             const char* fileName = "myfile.txt";
             result<int> r{eFileError::kFileNotFound};
-            r.load(TRICKY_SOURCE_LOCATION, tricky::c_str(fileName));
+            r.load(TRICKY_SOURCE_LOCATION,
+                   cseq_t(fileName, std::strlen(fileName)));
             return r;
         },
         std::move(process_error));

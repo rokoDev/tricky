@@ -9,8 +9,6 @@
 #include <new>
 #include <type_traits>
 
-#include "payload.h"
-
 namespace tricky
 {
 template <typename Payload, typename... Errors>
@@ -82,7 +80,6 @@ class context
 
     constexpr context(Payload &aPayload) noexcept : payload_(&aPayload)
     {
-        static_assert(is_payload_v<Payload>);
         static_assert(sizeof...(Errors) > 0);
     }
 

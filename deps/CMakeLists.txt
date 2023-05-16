@@ -19,21 +19,33 @@ FetchContent_Declare(
 FetchContent_Declare(
 	utils
 	GIT_REPOSITORY https://github.com/rokoDev/utils.git
-	GIT_TAG        7269bb81fd4834e53d89a7487c21c4b5b8d5c0d3
+	GIT_TAG        f757160958dc89f0c0071d6957043e470a985bec
 )
 
 FetchContent_Declare(
 	type_name
 	GIT_REPOSITORY https://github.com/rokoDev/type_name.git
-	GIT_TAG        fe39b753ddad0d034c10b45c2de26f77f180d591
+	GIT_TAG        05ce55919dc1dc55a3d87100f676d21c28fa42f7
+)
+
+FetchContent_Declare(
+	strong_type
+	GIT_REPOSITORY https://github.com/rokoDev/strong_type.git
+	GIT_TAG        b34f11ad2cbb164030a56a80e488cfd716d43b5d
+)
+
+FetchContent_Declare(
+	cargo
+	GIT_REPOSITORY https://github.com/rokoDev/cargo.git
+	GIT_TAG        4d9d54567c75bc750125375492e4756d10d6c964
 )
 
 # If necessary it's possible to use VersionHelper from different location instead of downloaded from GitHub
 # string(TOUPPER VersionHelper UP_VersionHelper)
 # set(FETCHCONTENT_SOURCE_DIR_${UP_VersionHelper} ${CMAKE_SOURCE_DIR}/../VersionHelper)
 
-FetchContent_MakeAvailable(user_literals interval utils type_name)
-target_link_libraries(tricky INTERFACE user_literals interval utils type_name)
+FetchContent_MakeAvailable(user_literals interval utils type_name strong_type cargo)
+target_link_libraries(tricky INTERFACE user_literals interval utils type_name strong_type cargo)
 
 # If use IDE add strong_type target into deps source group
-set_target_properties(user_literals interval utils type_name PROPERTIES FOLDER deps)
+set_target_properties(user_literals interval utils type_name strong_type cargo PROPERTIES FOLDER deps)

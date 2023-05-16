@@ -67,7 +67,7 @@ function(package_add_test)
   # Create groups in the IDE which mirrors directory structure on the hard disk
   get_target_property(rabbit_tests_src ${TEST_TARGET_NAME} SOURCES)
   source_group(
-    TREE   ${CMAKE_CURRENT_SOURCE_DIR}#/src
+    TREE   ${CMAKE_CURRENT_SOURCE_DIR}
     FILES  ${rabbit_tests_src}
   )
 
@@ -86,15 +86,6 @@ set(test_src
   )
 package_add_test(
   TEST_TARGET_NAME tricky_tests
-  TEST_SOURCES ${test_src}
-  EXTRA_TARGETS tricky tests_main gmock
-  )
-
-set(test_src
-  src/payload_tests.cpp
-  )
-package_add_test(
-  TEST_TARGET_NAME payload_tests
   TEST_SOURCES ${test_src}
   EXTRA_TARGETS tricky tests_main gmock
   )

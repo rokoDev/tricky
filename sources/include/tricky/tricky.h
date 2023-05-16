@@ -8,6 +8,7 @@
 #include <memory>
 #include <string_view>
 
+#include "data.h"
 #include "handlers.h"
 #include "lazy_load.h"
 #include "state.h"
@@ -518,7 +519,7 @@ class result<void, Error, Errors...>
 template <typename... Callbacks>
 constexpr bool process_payload(Callbacks &&...aCallbacks) noexcept
 {
-    return shared_state::get_payload().process(
+    return shared_state::get_const_payload().process(
         std::forward<Callbacks>(aCallbacks)...);
 }
 

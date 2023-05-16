@@ -1,6 +1,6 @@
 #ifndef tricky_state_h
 #define tricky_state_h
-#include "payload.h"
+#include <cargo/cargo.h>
 
 namespace tricky
 {
@@ -10,18 +10,12 @@ inline constexpr std::size_t kPayloadMaxSpace = TRICKY_PAYLOAD_MAXSPACE;
 inline constexpr std::size_t kPayloadMaxSpace = 256;
 #endif
 
-#ifdef TRICKY_PAYLOAD_MAXCOUNT
-inline constexpr std::size_t kPayloadMaxCount = TRICKY_PAYLOAD_MAXCOUNT;
-#else
-inline constexpr std::size_t kPayloadMaxCount = 16;
-#endif
-
 namespace details
 {
-template <std::size_t MaxSpace, std::size_t MaxCount>
 class state
 {
    public:
+    using payload = cargo::payload;
     void reset() noexcept
     {
         type_index_ = 0;
@@ -50,28 +44,23 @@ class state
         return type_index_;
     }
 
-    inline constexpr const payload<MaxSpace, MaxCount> &get_payload()
-        const noexcept
+    inline constexpr const payload &get_payload() const noexcept
     {
         return payload_;
     }
 
-    inline constexpr payload<MaxSpace, MaxCount> &get_payload() noexcept
-    {
-        return payload_;
-    }
+    inline constexpr payload &get_payload() noexcept { return payload_; }
 
    private:
     std::size_t type_index_{};
-    payload<MaxSpace, MaxCount> payload_;
+    char raw_buf_[kPayloadMaxSpace]{};
+    payload payload_{raw_buf_};
 };
 
-template <std::size_t MaxSpace, std::size_t MaxCount>
 class shared_state
 {
    public:
-    using state = state<MaxSpace, MaxCount>;
-
+    using payload = cargo::payload;
     static void reset() noexcept { state_.reset(); }
     static constexpr bool has_error() noexcept { return type_index(); }
     static constexpr bool has_value() noexcept { return !has_error(); }
@@ -99,7 +88,12 @@ class shared_state
         return state_.type_index();
     }
 
-    static constexpr const payload<MaxSpace, MaxCount> &get_payload() noexcept
+    static constexpr const payload &get_const_payload() noexcept
+    {
+        return state_.get_payload();
+    }
+
+    static constexpr payload &get_payload() noexcept
     {
         return state_.get_payload();
     }
@@ -114,11 +108,10 @@ class shared_state
     static state state_;
 };
 
-template <std::size_t MaxSpace, std::size_t MaxCount>
-state<MaxSpace, MaxCount> shared_state<MaxSpace, MaxCount>::state_{};
+state shared_state::state_{};
 }  // namespace details
 
-using shared_state = details::shared_state<kPayloadMaxSpace, kPayloadMaxCount>;
+using shared_state = details::shared_state;
 }  // namespace tricky
 
 #endif /* tricky_state_h */
