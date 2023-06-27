@@ -38,32 +38,41 @@ using ContextTest = Context<256>;
 
 TEST_F(ContextTest, Constructor)
 {
-    context ctx(p);
+    context ctx(&p);
 
-    ASSERT_FALSE(ctx.is_error());
-    ASSERT_FALSE(ctx.is_moved());
+    ASSERT_FALSE(ctx.has_error());
+    ASSERT_TRUE(ctx.payload());
 }
 
 TEST_F(ContextTest, MoveConstructor)
 {
-    context ctx(p);
+    context ctx(&p);
     context ctx2(std::move(ctx));
 
-    ASSERT_FALSE(ctx.is_error());
-    ASSERT_TRUE(ctx.is_moved());
+    ASSERT_FALSE(ctx.has_error());
+    ASSERT_FALSE(ctx.payload());
 
-    ASSERT_FALSE(ctx2.is_error());
-    ASSERT_FALSE(ctx2.is_moved());
+    ASSERT_FALSE(ctx2.has_error());
+    ASSERT_TRUE(ctx2.payload());
 }
 
 TEST_F(ContextTest, MoveAssignment)
 {
-    context ctx(p);
-    context ctx2 = std::move(ctx);
+    context ctx(&p);
+    context ctx2;
+    ctx2 = std::move(ctx);
 
-    ASSERT_FALSE(ctx.is_error());
-    ASSERT_TRUE(ctx.is_moved());
+    ASSERT_FALSE(ctx.has_error());
+    ASSERT_FALSE(ctx.payload());
 
-    ASSERT_FALSE(ctx2.is_error());
-    ASSERT_FALSE(ctx2.is_moved());
+    ASSERT_FALSE(ctx2.has_error());
+    ASSERT_TRUE(ctx2.payload());
+}
+
+TEST_F(ContextTest, HasError)
+{
+    context ctx(&p);
+
+    ASSERT_FALSE(ctx.has_error());
+    ASSERT_FALSE(ctx.has_error<eWriterError>());
 }

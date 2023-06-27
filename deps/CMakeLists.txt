@@ -19,7 +19,7 @@ FetchContent_Declare(
 FetchContent_Declare(
 	utils
 	GIT_REPOSITORY https://github.com/rokoDev/utils.git
-	GIT_TAG        f757160958dc89f0c0071d6957043e470a985bec
+	GIT_TAG        9a41b5e17aec518bb3c5f4fe0dd6fbbe70fca93b
 )
 
 FetchContent_Declare(
