@@ -3,6 +3,13 @@
 
 #include <tricky/tricky.h>
 
+enum class eBigError : std::uint64_t
+{
+    kOne,
+    kTwo,
+    kThree
+};
+
 enum class eReaderError : std::uint8_t
 {
     kError1,

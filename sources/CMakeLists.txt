@@ -6,6 +6,7 @@ target_sources(tricky
     include/tricky/lazy_load.h
     include/tricky/state.h
     include/tricky/context.h
+    include/tricky/error.h
   )
 
 target_include_directories(tricky INTERFACE

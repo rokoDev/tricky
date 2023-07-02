@@ -10,121 +10,84 @@
 #include <new>
 #include <type_traits>
 
+#include "error.h"
+
 namespace tricky
 {
 template <typename Payload, typename... Errors>
 class context;
 
-namespace details
-{
-namespace error_ops
-{
-template <typename StrongT>
-struct DataPtrOps
-    : strong::indirection<StrongT>
-    , strong::subscription<StrongT>
-    , strong::comparisons<StrongT>
-    , strong::implicitly_convertible_to_underlying<StrongT>
+template <typename T>
+struct is_context : std::false_type
 {
 };
 
-using Src = strong::strong_type<struct SrcTag, std::byte const *, DataPtrOps>;
-using Dst = strong::strong_type<struct DstTag, std::byte *, DataPtrOps>;
+template <typename Payload, typename... Errors>
+struct is_context<context<Payload, Errors...>> : std::true_type
+{
+};
 
 template <typename T>
-using error_destroyer_t = void (*)(T &) noexcept;
-using error_copier_t = void (*)(Dst aDst, Src aSrc) noexcept;
+inline constexpr bool is_context_v = is_context<T>::value;
 
-template <typename E, typename Context>
-static void destroy_error(Context &aCtx) noexcept
+namespace details
 {
-    aCtx.template reset_error<E>();
+namespace ctx
+{
+template <typename T, typename E>
+void set_error(E aError, T &aCtx) noexcept
+{
+    static_assert(is_context_v<T>);
+    assert(!aCtx.has_error());
+    static_assert(T::error_type_list::template contains_v<E>);
+
+    new (aCtx.data_) error(aError);
+
+    aCtx.set(T::kHasError);
 }
 
-template <typename E>
-static void copy_error(Dst aDst, Src aSrc) noexcept
+template <typename T>
+void reset_error(T &aCtx) noexcept
 {
-    static_assert(std::is_nothrow_copy_constructible_v<E>);
-    assert(utils::is_aligned<E>(aDst) &&
-           "aDst is not aligned to contain value of type E");
-    assert(utils::is_aligned<E>(aSrc) &&
-           "aSrc is not aligned to contain value of type E");
-    new (aDst) E(*reinterpret_cast<E const *>(aSrc));
+    assert(aCtx.has_error());
+    reinterpret_cast<error *>(aCtx.data_)->~error();
+    aCtx.reset(T::kHasError);
 }
-}  // namespace error_ops
+}  // namespace ctx
 }  // namespace details
 
 template <typename Payload, typename... Errors>
 class context
 {
+    template <typename T, typename E>
+    friend void details::ctx::set_error(E aError, T &aCtx) noexcept;
+
+    friend void details::ctx::reset_error<context>(context &aCtx) noexcept;
+
    public:
     using error_type_list = utils::type_list<Errors...>;
     using payload_t = Payload;
 
    private:
-    using Src = details::error_ops::Src;
-    using Dst = details::error_ops::Dst;
-
-    using error_destroyer_t = details::error_ops::error_destroyer_t<context>;
-    using error_copier_t = details::error_ops::error_copier_t;
-
-    template <typename E>
-    void set_error(E aError) noexcept
+    enum : std::uint8_t
     {
-        static_assert(std::is_nothrow_copy_constructible_v<E>);
-        static_assert(error_type_list::template contains_v<E>);
-        static_assert(std::is_nothrow_destructible_v<E>);
-        assert(!error_destroyer_ &&
-               "error will be lost and never has a chance to be handled");
-        assert(!error_copier_ &&
-               "error will be lost and never has a chance to be handled");
-        new (data_) E(aError);
-        error_destroyer_ = details::error_ops::destroy_error<E, context>;
-        error_copier_ = details::error_ops::copy_error<E>;
-        error_index_ = error_type_list::template first_index_of_type<E>;
-    }
-
-    template <typename E>
-    void reset_error() noexcept
-    {
-        if (error_destroyer_)
-        {
-            assert(error_copier_);
-            static_assert(error_type_list::template contains_v<E>);
-            reinterpret_cast<E *>(data_)->~E();
-            error_destroyer_ = nullptr;
-            error_copier_ = nullptr;
-            error_index_ = error_type_list::size;
-            if (payload_)
-            {
-                payload_->reset();
-            }
-        }
-        else
-        {
-            assert(!error_copier_);
-            assert(!payload_ || (payload_ && !payload_->size()));
-        }
-    }
-
-    void reset_error() noexcept { std::invoke(error_destroyer_, *this); }
+        kIsActive = 0b00000001,
+        kHasError = 0b00000010
+    };
 
     void move_error_helper(context &aCtx) noexcept
     {
         aCtx.payload_ = nullptr;
-        if (error_copier_)
+        if (has_error())
         {
-            assert(error_destroyer_);
-
-            // copy error value from aCtx.data_ to data_
-            std::invoke(error_copier_, Dst(data_), Src(aCtx.data_));
-
-            // destroy error value in aCtx
-            aCtx.reset_error();
+            details::ctx::reset_error(*this);
         }
-        else
+
+        if (aCtx.has_error())
         {
-            assert(!error_destroyer_);
+            new (data_) class error(std::move(aCtx.error()));
+            this->set(kHasError);
+            details::ctx::reset_error(aCtx);
         }
     }
 
@@ -134,11 +97,7 @@ class context
     context(const context &) = delete;
     context &operator=(const context &) = delete;
 
-    context(context &&aCtx) noexcept
-        : error_destroyer_{aCtx.error_destroyer_}
-        , error_copier_{aCtx.error_copier_}
-        , payload_{aCtx.payload_}
-        , data_{}
+    context(context &&aCtx) noexcept : payload_{aCtx.payload_}
     {
         move_error_helper(aCtx);
     }
@@ -147,12 +106,6 @@ class context
     {
         if (this != &aCtx)
         {
-            assert(!error_destroyer_ &&
-                   "error will be lost and never has a chance to be handled");
-            assert(!error_copier_ &&
-                   "error will be lost and never has a chance to be handled");
-            error_destroyer_ = aCtx.error_destroyer_;
-            error_copier_ = aCtx.error_copier_;
             payload_ = aCtx.payload_;
             move_error_helper(aCtx);
         }
@@ -164,11 +117,21 @@ class context
         static_assert(sizeof...(Errors) > 0);
     }
 
+    class error &error() noexcept
+    {
+        assert(has_error());
+        return *reinterpret_cast<class error *>(data_);
+    }
+
+    const class error &error() const noexcept
+    {
+        assert(has_error());
+        return *reinterpret_cast<class error const *>(data_);
+    }
+
     template <typename T>
     void load(T &&aArg) noexcept
     {
-        assert(error_destroyer_ &&
-               "you can not add payload to a context if error is not set");
         assert(payload_ && "invalid payload_");
         payload_->load(std::forward<T>(aArg));
     }
@@ -177,10 +140,10 @@ class context
     std::enable_if_t<error_type_list::template contains_v<E>, bool> has_error()
         const noexcept
     {
-        return error_type_list::template first_index_of_type<E> == error_index_;
+        return has_error() && error().template contains<E>();
     }
 
-    inline bool has_error() const noexcept { return error_destroyer_; }
+    inline bool has_error() const noexcept { return check(kHasError); }
 
     template <typename E>
     std::enable_if_t<error_type_list::template contains_v<E>, E> get_error()
@@ -193,34 +156,51 @@ class context
     payload_t const *payload() const noexcept { return payload_; }
     payload_t *payload() noexcept { return payload_; }
 
-    inline bool is_active() const noexcept { return is_active_; }
+    inline bool is_active() const noexcept { return check(kIsActive); }
 
     void activate() noexcept
     {
-        assert(!is_active_);
-        is_active_ = true;
+        assert(!is_active());
+        set(kIsActive);
     }
 
     void deactivate() noexcept
     {
-        assert(is_active_);
-        is_active_ = false;
+        assert(is_active());
+        reset(kIsActive);
     }
 
     ~context()
     {
+        static_assert(
+            std::max({sizeof(Errors)...}) <= error::kMaxSize,
+            "Some of Errors can take more size than provided by default. You "
+            "can increase default size by setting compilation flag: "
+            "TRICKY_MAX_ERROR_SIZE=128(or any value of your choice)");
+        static_assert(
+            std::max({alignof(Errors)...}) <= error::kMaxAlignment,
+            "Some of Errors have more strict alignment than provided by "
+            "default. You can increase default alignment by setting "
+            "compilation flag: TRICKY_MAX_ERROR_ALIGNMENT=128(or any value of "
+            "your choice that is power of 2)");
         assert(!has_error() &&
                "error value and its payload will be lost and never has a "
                "chance to be handled");
     }
 
    private:
-    error_destroyer_t error_destroyer_{nullptr};
-    error_copier_t error_copier_{nullptr};
+    inline bool check(std::uint8_t aFlag) const noexcept
+    {
+        return state_ & aFlag;
+    }
+
+    inline void set(std::uint8_t aFlag) noexcept { state_ |= aFlag; }
+
+    inline void reset(std::uint8_t aFlag) noexcept { state_ &= ~aFlag; }
+
+    alignas(class error) std::byte data_[sizeof(class error)]{};
     payload_t *payload_{nullptr};
-    std::size_t error_index_{error_type_list::size};
-    alignas(Errors...) std::byte data_[std::max({sizeof(Errors)...})]{};
-    bool is_active_{};
+    std::uint8_t state_{};
 };
 }  // namespace tricky
 

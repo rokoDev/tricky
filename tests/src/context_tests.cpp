@@ -36,6 +36,16 @@ class Context : public ::testing::Test
 using ContextTest = Context<256>;
 }  // namespace
 
+TEST(CtxTest, StaticChecks)
+{
+    static_assert(std::is_nothrow_default_constructible_v<context>);
+    static_assert(not std::is_copy_constructible_v<context>);
+    static_assert(not std::is_copy_assignable_v<context>);
+    static_assert(std::is_nothrow_destructible_v<context>);
+    static_assert(std::is_nothrow_move_constructible_v<context>);
+    static_assert(std::is_nothrow_move_assignable_v<context>);
+}
+
 TEST_F(ContextTest, Constructor)
 {
     context ctx(&p);
@@ -47,32 +57,57 @@ TEST_F(ContextTest, Constructor)
 TEST_F(ContextTest, MoveConstructor)
 {
     context ctx(&p);
+    tricky::details::ctx::set_error(eFileError::kPermission, ctx);
+
+    ASSERT_TRUE(ctx.payload());
+
     context ctx2(std::move(ctx));
 
-    ASSERT_FALSE(ctx.has_error());
     ASSERT_FALSE(ctx.payload());
 
-    ASSERT_FALSE(ctx2.has_error());
     ASSERT_TRUE(ctx2.payload());
+    ASSERT_TRUE(ctx2.has_error());
+    ASSERT_TRUE(ctx2.has_error<eFileError>());
+    ASSERT_EQ(ctx2.error().value<eFileError>(), eFileError::kPermission);
+
+    tricky::details::ctx::reset_error(ctx2);
 }
 
 TEST_F(ContextTest, MoveAssignment)
 {
     context ctx(&p);
+    tricky::details::ctx::set_error(eFileError::kPermission, ctx);
+
     context ctx2;
     ctx2 = std::move(ctx);
 
-    ASSERT_FALSE(ctx.has_error());
     ASSERT_FALSE(ctx.payload());
 
-    ASSERT_FALSE(ctx2.has_error());
     ASSERT_TRUE(ctx2.payload());
+
+    ASSERT_TRUE(ctx2.has_error());
+    ASSERT_TRUE(ctx2.has_error<eFileError>());
+    ASSERT_EQ(ctx2.error().value<eFileError>(), eFileError::kPermission);
+
+    tricky::details::ctx::reset_error(ctx2);
 }
 
 TEST_F(ContextTest, HasError)
 {
     context ctx(&p);
+    ASSERT_FALSE(ctx.has_error());
+    ASSERT_FALSE(ctx.has_error<eWriterError>());
+    ASSERT_FALSE(ctx.has_error<eFileError>());
+
+    tricky::details::ctx::set_error(eFileError::kPermission, ctx);
+
+    ASSERT_TRUE(ctx.has_error());
+    ASSERT_TRUE(ctx.has_error<eFileError>());
+    ASSERT_EQ(ctx.error().value<eFileError>(), eFileError::kPermission);
+
+    tricky::details::ctx::reset_error(ctx);
 
     ASSERT_FALSE(ctx.has_error());
     ASSERT_FALSE(ctx.has_error<eWriterError>());
+    ASSERT_FALSE(ctx.has_error<eFileError>());
 }

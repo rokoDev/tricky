@@ -101,10 +101,21 @@ package_add_test(
   )
 
 set(test_src
+  include/test_common.h
   src/context_tests.cpp
   )
 package_add_test(
   TEST_TARGET_NAME context_tests
+  TEST_SOURCES ${test_src}
+  EXTRA_TARGETS tricky tests_main gmock
+  )
+
+set(test_src
+  include/test_common.h
+  src/error_tests.cpp
+  )
+package_add_test(
+  TEST_TARGET_NAME error_tests
   TEST_SOURCES ${test_src}
   EXTRA_TARGETS tricky tests_main gmock
   )
