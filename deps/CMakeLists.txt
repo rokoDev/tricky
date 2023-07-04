@@ -19,7 +19,7 @@ FetchContent_Declare(
 FetchContent_Declare(
 	utils
 	GIT_REPOSITORY https://github.com/rokoDev/utils.git
-	GIT_TAG        9a41b5e17aec518bb3c5f4fe0dd6fbbe70fca93b
+	GIT_TAG        a7a7472c6f70e2c8ad919a88b8399b2ee2398f7a
 )
 
 FetchContent_Declare(
@@ -40,9 +40,11 @@ FetchContent_Declare(
 	GIT_TAG        4d9d54567c75bc750125375492e4756d10d6c964
 )
 
-# If necessary it's possible to use VersionHelper from different location instead of downloaded from GitHub
+# If necessary it's possible to use VersionHelper or utils from different location instead of downloaded from GitHub
 # string(TOUPPER VersionHelper UP_VersionHelper)
 # set(FETCHCONTENT_SOURCE_DIR_${UP_VersionHelper} ${CMAKE_SOURCE_DIR}/../VersionHelper)
+# string(TOUPPER utils UP_utils)
+# set(FETCHCONTENT_SOURCE_DIR_${UP_utils} ${CMAKE_SOURCE_DIR}/../utils)
 
 FetchContent_MakeAvailable(user_literals interval utils type_name strong_type cargo)
 target_link_libraries(tricky INTERFACE user_literals interval utils type_name strong_type cargo)

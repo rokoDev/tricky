@@ -6,6 +6,7 @@
 
 namespace
 {
+using namespace test_utils;
 using payload = cargo::payload;
 using context =
     tricky::context<payload, eReaderError, eWriterError, eFileError>;

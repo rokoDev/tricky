@@ -5,6 +5,7 @@
 
 namespace
 {
+using namespace test_utils;
 using seq_t = cargo::seq<char, std::size_t>;
 using cseq_t = cargo::seq<const char, std::size_t>;
 
