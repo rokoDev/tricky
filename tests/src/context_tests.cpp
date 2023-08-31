@@ -9,16 +9,14 @@ namespace
 using namespace test_utils;
 using payload = cargo::payload;
 using context =
-    tricky::context<payload, eReaderError, eWriterError, eFileError>;
+    tricky::heavy_context<payload, eReaderError, eWriterError, eFileError>;
 
 template <std::size_t MaxSpace>
 class Context : public ::testing::Test
 {
    protected:
     static constexpr std::size_t kMaxSpace = MaxSpace;
-
-    char raw_data_[kMaxSpace]{};
-    payload p{raw_data_};
+    char buffer_[kMaxSpace]{};
 
     static bool memvcmp(const void *memptr, unsigned char val,
                         const std::size_t size) noexcept
@@ -30,8 +28,6 @@ class Context : public ::testing::Test
         const unsigned char *mm = static_cast<const unsigned char *>(memptr);
         return (*mm == val) && (memcmp(mm, mm + 1, size - 1) == 0);
     }
-
-    void TearDown() override { p.reset(); }
 };
 
 using ContextTest = Context<256>;
@@ -39,7 +35,7 @@ using ContextTest = Context<256>;
 
 TEST(CtxTest, StaticChecks)
 {
-    static_assert(std::is_nothrow_default_constructible_v<context>);
+    static_assert(not std::is_default_constructible_v<context>);
     static_assert(not std::is_copy_constructible_v<context>);
     static_assert(not std::is_copy_assignable_v<context>);
     static_assert(std::is_nothrow_destructible_v<context>);
@@ -49,24 +45,22 @@ TEST(CtxTest, StaticChecks)
 
 TEST_F(ContextTest, Constructor)
 {
-    context ctx(&p);
+    context ctx(buffer_);
 
     ASSERT_FALSE(ctx.has_error());
-    ASSERT_TRUE(ctx.payload());
+    ASSERT_TRUE(ctx.payload().data());
 }
 
 TEST_F(ContextTest, MoveConstructor)
 {
-    context ctx(&p);
+    context ctx(buffer_);
     tricky::details::ctx::set_error(eFileError::kPermission, ctx);
-
-    ASSERT_TRUE(ctx.payload());
 
     context ctx2(std::move(ctx));
 
-    ASSERT_FALSE(ctx.payload());
+    ASSERT_FALSE(ctx.payload().data());
 
-    ASSERT_TRUE(ctx2.payload());
+    ASSERT_TRUE(ctx2.payload().data());
     ASSERT_TRUE(ctx2.has_error());
     ASSERT_TRUE(ctx2.has_error<eFileError>());
     ASSERT_EQ(ctx2.error().value<eFileError>(), eFileError::kPermission);
@@ -76,15 +70,16 @@ TEST_F(ContextTest, MoveConstructor)
 
 TEST_F(ContextTest, MoveAssignment)
 {
-    context ctx(&p);
+    context ctx(buffer_);
     tricky::details::ctx::set_error(eFileError::kPermission, ctx);
 
-    context ctx2;
+    char buf2[32]{};
+    context ctx2(buf2);
     ctx2 = std::move(ctx);
 
-    ASSERT_FALSE(ctx.payload());
+    ASSERT_FALSE(ctx.payload().data());
 
-    ASSERT_TRUE(ctx2.payload());
+    ASSERT_TRUE(ctx2.payload().data());
 
     ASSERT_TRUE(ctx2.has_error());
     ASSERT_TRUE(ctx2.has_error<eFileError>());
@@ -95,7 +90,7 @@ TEST_F(ContextTest, MoveAssignment)
 
 TEST_F(ContextTest, HasError)
 {
-    context ctx(&p);
+    context ctx(buffer_);
     ASSERT_FALSE(ctx.has_error());
     ASSERT_FALSE(ctx.has_error<eWriterError>());
     ASSERT_FALSE(ctx.has_error<eFileError>());

@@ -51,23 +51,16 @@ void copy_error(Dst aDst, Src aSrc) noexcept
 }  // namespace error_ops
 }  // namespace details
 
+template <std::size_t MaxSize = sizeof(std::uint64_t),
+          std::size_t MaxAlignment = alignof(std::uint64_t)>
 class error
 {
     template <typename E, typename T>
     friend void details::error_ops::destroy_error(T &) noexcept;
 
    public:
-#ifdef TRICKY_MAX_ERROR_SIZE
-    static constexpr std::size_t kMaxSize = TRICKY_MAX_ERROR_SIZE;
-#else
-    static constexpr std::size_t kMaxSize = sizeof(std::uint64_t);
-#endif
-
-#ifdef TRICKY_MAX_ERROR_ALIGNMENT
-    static constexpr std::size_t kMaxAlignment = TRICKY_MAX_ERROR_ALIGNMENT;
-#else
-    static constexpr std::size_t kMaxAlignment = alignof(std::uint64_t);
-#endif
+    static constexpr std::size_t kMaxSize = MaxSize;
+    static constexpr std::size_t kMaxAlignment = MaxAlignment;
 
     ~error()
     {

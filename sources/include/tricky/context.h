@@ -14,16 +14,24 @@
 
 namespace tricky
 {
-template <typename Payload, typename... Errors>
+template <typename Error, typename... RestErrors>
 class context;
+
+template <typename Payload, typename... Errors>
+class heavy_context;
 
 template <typename T>
 struct is_context : std::false_type
 {
 };
 
+template <typename... Errors>
+struct is_context<context<Errors...>> : std::true_type
+{
+};
+
 template <typename Payload, typename... Errors>
-struct is_context<context<Payload, Errors...>> : std::true_type
+struct is_context<heavy_context<Payload, Errors...>> : std::true_type
 {
 };
 
@@ -40,8 +48,9 @@ void set_error(E aError, T &aCtx) noexcept
     static_assert(is_context_v<T>);
     assert(!aCtx.has_error());
     static_assert(T::error_type_list::template contains_v<E>);
+    using error_t = typename T::error_t;
 
-    new (aCtx.data_) error(aError);
+    new (aCtx.data_) error_t(aError);
 
     aCtx.set(T::kHasError);
 }
@@ -50,23 +59,26 @@ template <typename T>
 void reset_error(T &aCtx) noexcept
 {
     assert(aCtx.has_error());
-    reinterpret_cast<error *>(aCtx.data_)->~error();
+    using error_t = typename T::error_t;
+    reinterpret_cast<error_t *>(aCtx.data_)->~error_t();
     aCtx.reset(T::kHasError);
 }
 }  // namespace ctx
 }  // namespace details
 
-template <typename Payload, typename... Errors>
+template <typename Error, typename... RestErrors>
 class context
 {
     template <typename T, typename E>
     friend void details::ctx::set_error(E aError, T &aCtx) noexcept;
 
-    friend void details::ctx::reset_error<context>(context &aCtx) noexcept;
+    template <typename T>
+    friend void details::ctx::reset_error(T &aCtx) noexcept;
 
    public:
-    using error_type_list = utils::type_list<Errors...>;
-    using payload_t = Payload;
+    using error_type_list = utils::type_list<Error, RestErrors...>;
+    using error_t = error<std::max({sizeof(Error), sizeof(RestErrors)...}),
+                          std::max({alignof(Error), alignof(RestErrors)...})>;
 
    private:
     enum : std::uint8_t
@@ -77,7 +89,6 @@ class context
 
     void move_error_helper(context &aCtx) noexcept
     {
-        aCtx.payload_ = nullptr;
         if (has_error())
         {
             details::ctx::reset_error(*this);
@@ -85,55 +96,38 @@ class context
 
         if (aCtx.has_error())
         {
-            new (data_) class error(std::move(aCtx.error()));
+            new (data_) error_t(std::move(aCtx.error()));
             this->set(kHasError);
             details::ctx::reset_error(aCtx);
         }
     }
 
    public:
-    context() noexcept = default;
-
+    constexpr context() = default;
     context(const context &) = delete;
     context &operator=(const context &) = delete;
 
-    context(context &&aCtx) noexcept : payload_{aCtx.payload_}
-    {
-        move_error_helper(aCtx);
-    }
+    context(context &&aCtx) noexcept { move_error_helper(aCtx); }
 
     context &operator=(context &&aCtx) noexcept
     {
         if (this != &aCtx)
         {
-            payload_ = aCtx.payload_;
             move_error_helper(aCtx);
         }
         return *this;
     }
 
-    constexpr context(Payload *aPayload) noexcept : payload_(aPayload)
-    {
-        static_assert(sizeof...(Errors) > 0);
-    }
-
-    class error &error() noexcept
+    error_t &error() noexcept
     {
         assert(has_error());
-        return *reinterpret_cast<class error *>(data_);
+        return *reinterpret_cast<error_t *>(data_);
     }
 
-    const class error &error() const noexcept
+    const error_t &error() const noexcept
     {
         assert(has_error());
-        return *reinterpret_cast<class error const *>(data_);
-    }
-
-    template <typename T>
-    void load(T &&aArg) noexcept
-    {
-        assert(payload_ && "invalid payload_");
-        payload_->load(std::forward<T>(aArg));
+        return *reinterpret_cast<error_t const *>(data_);
     }
 
     template <typename E>
@@ -153,9 +147,6 @@ class context
         return *reinterpret_cast<E const *>(data_);
     }
 
-    payload_t const *payload() const noexcept { return payload_; }
-    payload_t *payload() noexcept { return payload_; }
-
     inline bool is_active() const noexcept { return check(kIsActive); }
 
     void activate() noexcept
@@ -172,17 +163,6 @@ class context
 
     ~context()
     {
-        static_assert(
-            std::max({sizeof(Errors)...}) <= error::kMaxSize,
-            "Some of Errors can take more size than provided by default. You "
-            "can increase default size by setting compilation flag: "
-            "TRICKY_MAX_ERROR_SIZE=128(or any value of your choice)");
-        static_assert(
-            std::max({alignof(Errors)...}) <= error::kMaxAlignment,
-            "Some of Errors have more strict alignment than provided by "
-            "default. You can increase default alignment by setting "
-            "compilation flag: TRICKY_MAX_ERROR_ALIGNMENT=128(or any value of "
-            "your choice that is power of 2)");
         assert(!has_error() &&
                "error value and its payload will be lost and never has a "
                "chance to be handled");
@@ -198,9 +178,47 @@ class context
 
     inline void reset(std::uint8_t aFlag) noexcept { state_ &= ~aFlag; }
 
-    alignas(class error) std::byte data_[sizeof(class error)]{};
-    payload_t *payload_{nullptr};
+    alignas(error_t) std::byte data_[sizeof(error_t)]{};
     std::uint8_t state_{};
+};
+
+template <typename Payload, typename... Errors>
+class heavy_context final : public context<Errors...>
+{
+    using base = context<Errors...>;
+
+   public:
+    using payload_t = Payload;
+
+    heavy_context(const heavy_context &) = delete;
+    heavy_context &operator=(const heavy_context &) = delete;
+
+    heavy_context(heavy_context &&) = default;
+    heavy_context &operator=(heavy_context &&) = default;
+
+    constexpr heavy_context(char *aPayload, std::size_t aSize) noexcept
+        : base(), payload_(aPayload, aSize)
+    {
+    }
+
+    template <std::size_t N>
+    constexpr heavy_context(char (&aStorage)[N]) noexcept
+        : heavy_context(aStorage, N)
+    {
+    }
+
+    template <typename T>
+    void load(T &&aArg) noexcept
+    {
+        assert(payload_ && "invalid payload_");
+        payload_->load(std::forward<T>(aArg));
+    }
+
+    const payload_t &payload() const noexcept { return payload_; }
+    payload_t &payload() noexcept { return payload_; }
+
+   private:
+    payload_t payload_;
 };
 }  // namespace tricky
 

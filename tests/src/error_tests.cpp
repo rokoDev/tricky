@@ -6,7 +6,7 @@
 namespace
 {
 using namespace test_utils;
-using error = tricky::error;
+using error = tricky::error<>;
 }  // namespace
 
 TEST(ErrorTest, CompileTimeChecks)

@@ -37,7 +37,7 @@ FetchContent_Declare(
 FetchContent_Declare(
 	cargo
 	GIT_REPOSITORY https://github.com/rokoDev/cargo.git
-	GIT_TAG        4d9d54567c75bc750125375492e4756d10d6c964
+	GIT_TAG        9457f5877d77af2fd80a40bd779132184b832e2e
 )
 
 # If necessary it's possible to use VersionHelper or utils from different location instead of downloaded from GitHub
