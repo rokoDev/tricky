@@ -66,6 +66,23 @@ void reset_error(T &aCtx) noexcept
 }  // namespace ctx
 }  // namespace details
 
+class polymorphic_context
+{
+   public:
+    virtual bool is_active() const noexcept = 0;
+    virtual void activate() noexcept = 0;
+    virtual void deactivate() noexcept = 0;
+
+   protected:
+    polymorphic_context() noexcept = default;
+    virtual ~polymorphic_context() noexcept = default;
+
+    thread_local static polymorphic_context *active_context_;
+};
+
+thread_local polymorphic_context *polymorphic_context::active_context_ =
+    nullptr;
+
 template <typename Error, typename... RestErrors>
 class context
 {
@@ -149,6 +166,14 @@ class context
 
     inline bool is_active() const noexcept { return check(kIsActive); }
 
+    ~context()
+    {
+        assert(!has_error() &&
+               "error value and its payload will be lost and never has a "
+               "chance to be handled");
+    }
+
+   protected:
     void activate() noexcept
     {
         assert(!is_active());
@@ -159,13 +184,6 @@ class context
     {
         assert(is_active());
         reset(kIsActive);
-    }
-
-    ~context()
-    {
-        assert(!has_error() &&
-               "error value and its payload will be lost and never has a "
-               "chance to be handled");
     }
 
    private:
@@ -220,6 +238,32 @@ class heavy_context final : public context<Errors...>
    private:
     payload_t payload_;
 };
+
+namespace details
+{
+template <typename Context>
+struct polymorphic_context_impl
+    : polymorphic_context
+    , Context
+{
+    bool is_active() const noexcept override final
+    {
+        return this == active_context_;
+    }
+
+    void activate() noexcept override final
+    {
+        Context::activate();
+        active_context_ = this;
+    }
+
+    void deactivate() noexcept override final
+    {
+        active_context_ = nullptr;
+        Context::deactivate();
+    }
+};
+}  // namespace details
 }  // namespace tricky
 
 #endif /* tricky_context_h */
