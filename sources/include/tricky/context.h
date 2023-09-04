@@ -264,6 +264,41 @@ struct polymorphic_context_impl
     }
 };
 }  // namespace details
+
+template <typename Ctx>
+class context_activator
+{
+   public:
+    context_activator(const context_activator &) = delete;
+    context_activator &operator=(const context_activator &) = delete;
+    context_activator &operator=(context_activator &&aOther) = delete;
+
+    ~context_activator()
+    {
+        if (context_ && context_->is_active())
+        {
+            context_->deactivate();
+        }
+    }
+
+    explicit inline context_activator(Ctx &aCtx) noexcept
+        : context_{aCtx.is_active() ? nullptr : &aCtx}
+    {
+        if (context_)
+        {
+            context_->activate();
+        }
+    }
+
+    inline context_activator(context_activator &&aOther) noexcept
+        : context_{aOther.context_}
+    {
+        aOther.context_ = nullptr;
+    }
+
+   private:
+    Ctx *context_{};
+};
 }  // namespace tricky
 
 #endif /* tricky_context_h */
